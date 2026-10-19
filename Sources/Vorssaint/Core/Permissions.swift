@@ -7,6 +7,7 @@ import AVFoundation
 import Combine
 import CoreGraphics
 import EventKit
+import os
 import UserNotifications
 
 /// Central place to check, request and watch the TCC permissions the app uses.
@@ -417,6 +418,92 @@ final class Permissions: ObservableObject {
         let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?\(pane)")!
         NSWorkspace.shared.open(url)
     }
+
+    #if VORSSAINT_DEVELOPMENT
+    /// What `--request-permissions` found, one line per permission, in the
+    /// unified log under this category, so a build's setup can be checked.
+    private static let developmentLog = Logger(subsystem: Bundle.main.bundleIdentifier ?? "vorssaint",
+                                               category: "permissions")
+
+    /// Each permission's state, read without asking. Off the main thread:
+    /// the Full Disk Access probe and the Automation checks can block.
+    private static func developmentReport(_ done: @escaping ([(name: String, granted: Bool)]) -> Void) {
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
+            DispatchQueue.global(qos: .userInitiated).async {
+                var report: [(name: String, granted: Bool)] = [
+                    ("notifications", [.authorized, .provisional].contains(settings.authorizationStatus)),
+                    ("calendar", EKEventStore.authorizationStatus(for: .event) == .fullAccess),
+                    ("camera", AVCaptureDevice.authorizationStatus(for: .video) == .authorized),
+                    ("microphone", AVCaptureDevice.authorizationStatus(for: .audio) == .authorized)]
+                for target in AutomationTarget.allCases {
+                    let status = automationStatus(for: target)
+                    // An app that is not running cannot be checked or asked.
+                    guard status != .notDeterminable else { continue }
+                    report.append(("automation \(target.rawValue)", status == .granted))
+                }
+                report += [("accessibility", AXIsProcessTrusted()),
+                           ("screenRecording", CGPreflightScreenCaptureAccess()),
+                           ("fullDiskAccess", probeFullDiskAccess())]
+                DispatchQueue.main.async { done(report) }
+            }
+        }
+    }
+
+    /// Logs every permission's state, then asks for each one still missing
+    /// in turn, each after the last one is answered: alerts the system shows
+    /// in place first, then the lists in System Settings, Full Disk Access
+    /// last since it opens its pane. Nothing granted is asked again.
+    func requestAllForDevelopment() {
+        Self.developmentReport { report in
+            for entry in report {
+                Self.developmentLog.notice("permission \(entry.name, privacy: .public): \(entry.granted ? "granted" : "missing", privacy: .public)")
+            }
+            let missing = Set(report.filter { !$0.granted }.map(\.name))
+            let steps: [(name: String, run: (@escaping () -> Void) -> Void)] = [
+                ("notifications", { next in
+                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in
+                        DispatchQueue.main.async(execute: next)
+                    }
+                }),
+                ("calendar", { next in
+                    EKEventStore().requestFullAccessToEvents { _, _ in DispatchQueue.main.async(execute: next) }
+                }),
+                ("camera", { next in AVCaptureDevice.requestAccess(for: .video) { _ in DispatchQueue.main.async(execute: next) } }),
+                ("microphone", { next in AVCaptureDevice.requestAccess(for: .audio) { _ in DispatchQueue.main.async(execute: next) } }),
+                ("automation", { next in
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        for target in AutomationTarget.allCases where missing.contains("automation \(target.rawValue)") {
+                            var descriptor = AEAddressDesc()
+                            let created = target.rawValue.withCString {
+                                AECreateDesc(typeApplicationBundleID, $0, target.rawValue.utf8.count, &descriptor)
+                            }
+                            guard created == noErr else { continue }
+                            _ = AEDeterminePermissionToAutomateTarget(&descriptor, typeWildCard, typeWildCard, true)
+                            AEDisposeDesc(&descriptor)
+                        }
+                        DispatchQueue.main.async(execute: next)
+                    }
+                }),
+                ("accessibility", { next in
+                    self.requestAccessibility()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: next)
+                }),
+                ("screenRecording", { next in
+                    self.requestScreenRecording()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: next)
+                }),
+                ("fullDiskAccess", { _ in self.requestFullDiskAccess() })]
+            let wanted = steps.filter { step in missing.contains { $0 == step.name || $0.hasPrefix(step.name + " ") } }
+            Self.developmentLog.notice("permission requests: \(wanted.isEmpty ? "none" : wanted.map(\.name).joined(separator: ", "), privacy: .public)")
+            func run(_ index: Int) {
+                guard index < wanted.count else { return }
+                let step = wanted[index].run
+                step { run(index + 1) }
+            }
+            run(0)
+        }
+    }
+    #endif
 
     // MARK: - Automation (Apple Events)
 

@@ -211,6 +211,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             #if VORSSAINT_DEVELOPMENT
+            // `--request-permissions`: asks for every permission the app can
+            // use, one prompt after another, so a new build is set up at once.
+            if CommandLine.arguments.contains("--request-permissions") {
+                Permissions.shared.requestAllForDevelopment()
+            }
             if CommandLine.arguments.contains("--preview-notch-tour") {
                 self.showUpdateHighlights(isReview: true)
                 return

@@ -56,7 +56,8 @@ struct NotchAgentTile: Identifiable, Equatable {
     let card: NotchAgentCard
     /// The account a limits card belongs to.
     let provider: AgentProvider?
-    /// An added Codex home's card; nil for the one the logs feed.
+    /// An added Codex home's or Claude Code folder's card; nil for the one
+    /// the logs feed.
     var accountID: String? = nil
     /// The Resets card beside added Codex homes, which says whose resets they are.
     var namesDefaultAccount = false
@@ -119,6 +120,11 @@ enum NotchAgentSupport {
     /// Added Codex accounts have cards only in the Limits card's place.
     static func showsCodexAccounts(in defaults: UserDefaults = .standard) -> Bool {
         providers(in: defaults).contains(.codex) && !hiddenCards(in: defaults).contains(.limits)
+    }
+
+    /// Added Claude accounts, likewise.
+    static func showsClaudeAccounts(in defaults: UserDefaults = .standard) -> Bool {
+        providers(in: defaults).contains(.claude) && !hiddenCards(in: defaults).contains(.limits)
     }
 
     static func period(in defaults: UserDefaults = .standard) -> AgentPeriod {
@@ -261,15 +267,17 @@ enum NotchAgentSupport {
     /// Below this width every card takes a row of its own.
     static let pairWidth: CGFloat = 390
 
-    /// Codex homes the person added take the place of Codex's one limits
-    /// card, the usual home among them when they add it.
+    /// Codex homes and Claude Code folders the person added take the place
+    /// of their agent's one limits card, the usual one among them when they
+    /// add it.
     static func tiles(cards: [NotchAgentCard], providers: [AgentProvider],
-                      codexAccounts: [String] = []) -> [NotchAgentTile] {
+                      codexAccounts: [String] = [], claudeAccounts: [String] = []) -> [NotchAgentTile] {
         cards.flatMap { card -> [NotchAgentTile] in
             switch card {
             case .limits: return providers.filter(\.reportsLimits).flatMap { provider -> [NotchAgentTile] in
-                guard provider == .codex, !codexAccounts.isEmpty else { return [NotchAgentTile(card: .limits, provider: provider)] }
-                return codexAccounts.map { NotchAgentTile(card: .limits, provider: provider, accountID: $0) }
+                let accounts = provider == .codex ? codexAccounts : provider == .claude ? claudeAccounts : []
+                guard !accounts.isEmpty else { return [NotchAgentTile(card: .limits, provider: provider)] }
+                return accounts.map { NotchAgentTile(card: .limits, provider: provider, accountID: $0) }
             }
             // Banked resets belong to a Codex account: the default one, which
             // the card names once others have cards.

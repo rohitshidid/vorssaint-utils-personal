@@ -100,6 +100,8 @@ final class AgentUsageService: ObservableObject {
     /// The organization Claude Code signs in to, when its profile says.
     private var claudeOrganization: String?
     private var claudeProfileModified: Date?
+    /// The account profile last read: the first added account's, or the usual one.
+    private var claudeProfileURL: URL?
     private var claudeAppModified: Date?
     private var claudeAppSamples: [AgentClaudeAppUsage.Sample] = []
     private var claudeAccountLimits: AgentLimits?
@@ -119,12 +121,13 @@ final class AgentUsageService: ObservableObject {
 
     func syncWithPreferences() {
         CodexProfileLimitsService.shared.synchronize()
+        ClaudeProfileLimitsService.shared.synchronize()
         guard NotchAgentSupport.isEnabled() else { stop(); return }
         let wanted = NotchAgentSupport.providers()
         // An agent turned off is no longer read at all, and one turned on is
         // read from its start: both take a fresh reading, which would not
         // resume progress saved for the old set, so it goes at once. Codex
-        // accounts keep their checks: they read no log.
+        // and Claude accounts keep their checks: they read no log.
         if running, wanted != providers { stop(keepingProgress: false, pausingAccounts: false) }
         if !running {
             running = true
@@ -144,6 +147,7 @@ final class AgentUsageService: ObservableObject {
     /// way back costs far more than the pause saves.
     func pause() {
         CodexProfileLimitsService.shared.pause()
+        ClaudeProfileLimitsService.shared.pause()
         // A page torn down with the island never reports leaving, so the
         // minute cadence would outlive it.
         pageVisible = false
@@ -175,7 +179,10 @@ final class AgentUsageService: ObservableObject {
     }
 
     func stop(keepingProgress keeps: Bool = true, pausingAccounts: Bool = true) {
-        if pausingAccounts { CodexProfileLimitsService.shared.pause() }
+        if pausingAccounts {
+            CodexProfileLimitsService.shared.pause()
+            ClaudeProfileLimitsService.shared.pause()
+        }
         pageVisible = false
         // A first read still going stops at its next chunk, so the wait
         // below is short.
@@ -217,6 +224,7 @@ final class AgentUsageService: ObservableObject {
             claudePlan = nil
             claudeOrganization = nil
             claudeProfileModified = nil
+            claudeProfileURL = nil
             claudeAppModified = nil
             claudeAppSamples = []
             claudeAccountLimits = nil
@@ -697,13 +705,16 @@ final class AgentUsageService: ObservableObject {
     // MARK: Plans and limits
 
     /// The plan comes from the account profile Claude Code caches; nothing
-    /// else in that file is kept.
+    /// else in that file is kept. With accounts added, it is the first one's
+    /// rather than the usual folder's, which the Claude app may sign in to.
     private func readClaudePlan() {
         guard enabled.contains(.claude) else { return }
-        let url = home.appending(path: ".claude.json")
+        let url = ClaudeAccountProfile.profileURL(configDirectory: ClaudeAccountProfile.mainConfigDirectory(home: home),
+                                                  home: home)
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-        guard modified != claudeProfileModified else { return }
+        guard modified != claudeProfileModified || url != claudeProfileURL else { return }
         claudeProfileModified = modified
+        claudeProfileURL = url
         guard let data = try? Data(contentsOf: url, options: .mappedIfSafe),
               let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let account = json["oauthAccount"] as? [String: Any] else {
@@ -770,12 +781,13 @@ final class AgentUsageService: ObservableObject {
         claudeAccountRequest = request
         let session = self.session
         let home = self.home
+        let folder = ClaudeAccountProfile.mainConfigDirectory(home: home)
         claudeAccountQueue.async { [weak self] in
             let result: Result<AgentClaudeServer.Summary, AgentClaudeServer.Failure>
             if let executable = AgentClaudeServer.executable(home: home, searchPath: ProcessInfo.processInfo.environment["PATH"]) {
                 var environment = AgentCodexServer.environment(for: executable, searchPath: nil)
                 environment["PATH"] = AgentClaudeServer.searchPath(after: environment["PATH"] ?? "", home: home)
-                result = request.run(executable, home: home, environment: environment)
+                result = request.run(executable, home: home, configDirectory: folder, environment: environment)
             } else { result = .failure(.missing) }
             DispatchQueue.main.async {
                 guard let self, self.running, !self.paused, self.session == session,

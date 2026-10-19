@@ -472,12 +472,20 @@ struct AgentLogRoot: Equatable {
 
     /// Canonical, because file events report real paths: a folder kept as a
     /// link elsewhere, as dotfile setups do, would otherwise never match.
-    static func all(home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [AgentLogRoot] {
-        [(AgentProvider.claude, ".claude/projects"), (.claude, ".config/claude/projects"),
-         (.codex, ".codex/sessions"), (.codex, ".codex/archived_sessions"),
-         (.opencode, ".local/share/opencode"), (.copilot, ".copilot/session-state")].map { provider, path in
+    /// Claude Code run with a `CLAUDE_CONFIG_DIR` of its own, as one account
+    /// beside another, logs in that folder, which is read too.
+    static func all(home: URL = FileManager.default.homeDirectoryForCurrentUser,
+                    claudeFolders: [URL]? = nil) -> [AgentLogRoot] {
+        let usual = [(AgentProvider.claude, ".claude/projects"), (.claude, ".config/claude/projects"),
+                     (.codex, ".codex/sessions"), (.codex, ".codex/archived_sessions"),
+                     (.opencode, ".local/share/opencode"), (.copilot, ".copilot/session-state")].map { provider, path in
             AgentLogRoot(provider: provider, url: canonical(home.appending(path: path, directoryHint: .isDirectory)))
         }
+        let accounts = (claudeFolders ?? ClaudeAccountProfile.configDirectories(home: home)).map {
+            AgentLogRoot(provider: .claude, url: canonical($0.appending(path: "projects", directoryHint: .isDirectory)))
+        }
+        var seen = Set<URL>()
+        return (usual + accounts).filter { seen.insert($0.url).inserted }
     }
 
     /// The path the file system reports for `url`; the path as given while

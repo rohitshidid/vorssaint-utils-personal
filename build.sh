@@ -310,6 +310,7 @@ if (( TEST )); then
         Sources/Vorssaint/Services/AgentUsage/ClaudeProfileLimitsService.swift
         Sources/Vorssaint/Services/AgentUsage/ClaudeAttention.swift
         Sources/Vorssaint/Services/Notch/NotchDictation.swift
+        Sources/Vorssaint/Services/AgentUsage/ClaudeAppActivitySupport.swift
         Sources/Vorssaint/Services/AgentUsage/AgentOpenCodeReader.swift
         Sources/Vorssaint/Services/Notch/NotchGestureSupport.swift
         Sources/Vorssaint/Services/Notch/NotchSectionPaging.swift

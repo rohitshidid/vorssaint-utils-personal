@@ -117,7 +117,22 @@ final class AgentUsageService: ObservableObject {
     private var savedMark: Int?
     private var lastSave = Date.distantPast
 
+    /// The logs' last reading, before the Claude app's own sessions join it.
+    private var logSnapshot = AgentUsageSnapshot()
+    /// Sessions the Claude app runs in the cloud and its chats, which write
+    /// no log here. Main thread.
+    private var appSessions: [AgentLiveSession] = []
+
     private init() {}
+
+    /// Main thread.
+    func setAppSessions(_ sessions: [AgentLiveSession]) {
+        guard sessions != appSessions else { return }
+        appSessions = sessions
+        guard running else { return }
+        let next = ClaudeAppActivitySupport.merging(logSnapshot, app: sessions)
+        if snapshot != next { snapshot = next }
+    }
 
     func syncWithPreferences() {
         CodexProfileLimitsService.shared.synchronize()
@@ -142,6 +157,7 @@ final class AgentUsageService: ObservableObject {
         }
         syncPrices()
         refreshClaudeLimits()
+        ClaudeAppActivityService.shared.synchronize(enabled: wanted.contains(.claude))
     }
 
     /// Stops reading while the island is away, as with the display asleep or
@@ -151,6 +167,7 @@ final class AgentUsageService: ObservableObject {
         CodexProfileLimitsService.shared.pause()
         ClaudeProfileLimitsService.shared.pause()
         ClaudeAttentionService.shared.pause()
+        ClaudeAppActivityService.shared.synchronize(enabled: false)
         // A page torn down with the island never reports leaving, so the
         // minute cadence would outlive it.
         pageVisible = false
@@ -187,6 +204,7 @@ final class AgentUsageService: ObservableObject {
             ClaudeProfileLimitsService.shared.pause()
             ClaudeAttentionService.shared.pause()
         }
+        ClaudeAppActivityService.shared.synchronize(enabled: false)
         pageVisible = false
         // A first read still going stops at its next chunk, so the wait
         // below is short.
@@ -207,6 +225,8 @@ final class AgentUsageService: ObservableObject {
         pricesInFlight = false
         pricesSaved = nil
         snapshot = AgentUsageSnapshot()
+        logSnapshot = AgentUsageSnapshot()
+        appSessions = []
         claudeAppChecked = nil
         queue.async { [self] in
             readerSession = -1
@@ -640,7 +660,9 @@ final class AgentUsageService: ObservableObject {
             guard let self, self.running, self.session == session else { return }
             if self.claudeAppChecked != checked { self.claudeAppChecked = checked }
             if self.pricesUpdated != prices { self.pricesUpdated = prices }
-            if self.snapshot != next { self.snapshot = next }
+            self.logSnapshot = next
+            let shown = ClaudeAppActivitySupport.merging(next, app: self.appSessions)
+            if self.snapshot != shown { self.snapshot = shown }
         }
     }
 

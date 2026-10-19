@@ -39,6 +39,7 @@ enum NotchAgentTests {
         CodexAccountLimitsTests.run(suite)
         ClaudeAccountLimitsTests.run(suite)
         IslandCompanionTests.run(suite)
+        ClaudeAppActivityTests.run(suite)
         preferences(suite)
         limitUse(suite)
         agentDefaults(suite)
@@ -2471,8 +2472,8 @@ enum NotchAgentTests {
         let short = snapshot([session(.claude, startedAgo: 754)])
         let long = snapshot([session(.claude, startedAgo: 3723), session(.codex, startedAgo: 60)])
         suite.expect(NotchAgentSupport.stripReading(short, readout: .elapsed, display: .remaining, now: now) == "12:34"
-                        && NotchAgentSupport.stripReading(long, readout: .elapsed, display: .remaining, now: now) == "1:02:03 +1",
-                     "the strip counts from the earliest turn still working, and counts the others after it")
+                        && NotchAgentSupport.stripReading(long, readout: .elapsed, display: .remaining, now: now) == "1:02:03 · 1:00",
+                     "the strip shows a clock for each working session, the earliest first")
         func claude(_ id: String, startedAgo: TimeInterval) -> AgentLiveSession {
             AgentLiveSession(id: id, provider: .claude, started: now.addingTimeInterval(-startedAgo), lastActivity: now,
                              model: "claude-opus-5-5", project: "app", tokens: AgentTokens(), cost: 0)
@@ -2480,13 +2481,13 @@ enum NotchAgentTests {
         let twoClaudes = [claude("work", startedAgo: 61), claude("personal", startedAgo: 754)]
         suite.expect(NotchAgentSupport.stripMarks(twoClaudes) == [.claude, .claude]
                         && NotchAgentSupport.stripReading(snapshot(twoClaudes), readout: .elapsed, display: .remaining, now: now)
-                            == "12:34 +1",
-                     "two Claude sessions show two Claude marks and the longest one's clock, plus one")
+                            == "12:34 · 1:01",
+                     "two Claude sessions show two Claude marks and a clock for each")
         let many = twoClaudes + [claude("third", startedAgo: 30), claude("fourth", startedAgo: 5)]
         suite.expect(NotchAgentSupport.stripMarks(many).count == NotchAgentSupport.stripSessionLimit
                         && NotchAgentSupport.stripReading(snapshot(many), readout: .elapsed, display: .remaining, now: now)
-                            == "12:34 +3",
-                     "marks stop at the strip's room while the clock counts every other session")
+                            == "12:34 · 1:01 · 0:30 +1",
+                     "marks and clocks stop at the strip's room and count every other session")
         suite.expect(NotchAgentSupport.stripReading(short, readout: .cost, display: .remaining, now: now) == AgentFormat.cost(4.56)
                         && NotchAgentSupport.stripReading(long, readout: .tokens, display: .remaining, now: now)
                             == AgentFormat.tokens(600),
@@ -2553,7 +2554,7 @@ enum NotchAgentTests {
                         && geometry.compactAgentGeometry(wing: 57.2).compactActivitySize.width == 185 + 116,
                      "the wings take the width the reading needs, with the camera between them")
         suite.expect(geometry.compactAgentGeometry(wing: 12).compactActivityWingWidth == 44
-                        && geometry.compactAgentGeometry(wing: 300).compactActivityWingWidth == 80,
+                        && geometry.compactAgentGeometry(wing: 300).compactActivityWingWidth == 96,
                      "a wing is never narrower than the music strip's nor wider than the menus allow")
         // An island 300 wide over a 200 wide camera at x 1000, 32 tall at the screen's top (982).
         let island = CGRect(x: 850, y: 950, width: 300, height: 32)

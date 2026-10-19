@@ -3006,6 +3006,26 @@ enum NotchWingSide: Equatable {
 /// pointer is on one, that wing fades and lets clicks through to them; the
 /// camera's part, and the other wing, stay as they are.
 enum NotchWingFade {
+    /// The fade's length in milliseconds: quick enough that the icons are
+    /// there when the pointer is, long enough to read as a fade.
+    static let durationRange: ClosedRange<Double> = 100...800
+    static let defaultDuration = 300.0
+    /// The wing comes back this much slower than it went, so returning to
+    /// the island feels settled rather than abrupt.
+    static let returnStretch = 1.4
+
+    /// The fade out and back in, in seconds, for a stored length in
+    /// milliseconds; anything unusable takes the default.
+    static func durations(milliseconds: Double) -> (out: TimeInterval, back: TimeInterval) {
+        let value = milliseconds.isFinite && milliseconds > 0
+            ? min(durationRange.upperBound, max(durationRange.lowerBound, milliseconds)) : defaultDuration
+        return (value / 1000, value * returnStretch / 1000)
+    }
+
+    static func durations(in defaults: UserDefaults = .standard) -> (out: TimeInterval, back: TimeInterval) {
+        durations(milliseconds: defaults.object(forKey: DefaultsKey.notchWingFadeDuration) as? Double ?? defaultDuration)
+    }
+
     /// The wing of the island at `frame` the point is on; nil over the camera
     /// or off the island. The top edge belongs to the island, as in
     /// `NotchGeometry.contains`.

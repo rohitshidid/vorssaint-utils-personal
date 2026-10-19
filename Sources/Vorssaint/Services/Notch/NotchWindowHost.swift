@@ -1337,8 +1337,14 @@ private final class NotchCanvas: NSView {
         }
         guard silhouette.mask != nil else { return }
         layoutWingMask()
+        // Out eases off as the icons appear; back in starts gently and
+        // settles, a little slower, so neither reads as a blink.
+        let durations = NotchWingFade.durations()
         CATransaction.begin()
-        CATransaction.setAnimationDuration(0.18)
+        CATransaction.setAnimationDuration(side == nil ? durations.back : durations.out)
+        CATransaction.setAnimationTimingFunction(side == nil
+            ? CAMediaTimingFunction(controlPoints: 0.4, 0, 0.2, 1)
+            : CAMediaTimingFunction(controlPoints: 0.25, 0.1, 0.25, 1))
         if side == nil {
             // Back in full: the mask goes once the wing has faded back in.
             CATransaction.setCompletionBlock { [weak self] in

@@ -2565,6 +2565,12 @@ enum NotchAgentTests {
         suite.expect(side(849) == nil && side(1150) == nil && side(860, 949) == nil && side(860, 982) == .leading
                         && NotchWingFade.side(of: CGPoint(x: 860, y: 970), island: island, cameraMidX: 1000, cameraWidth: 0) == nil,
                      "off the island nothing fades, and the top edge belongs to the island")
+        let standard = NotchWingFade.durations(milliseconds: NotchWingFade.defaultDuration)
+        suite.expect(standard.out == 0.3 && abs(standard.back - 0.42) < 0.0001,
+                     "a wing fades in 0.3 s by default and comes back a little slower")
+        suite.expect(NotchWingFade.durations(milliseconds: 20).out == 0.1 && NotchWingFade.durations(milliseconds: 5_000).out == 0.8
+                        && NotchWingFade.durations(milliseconds: .nan).out == 0.3 && NotchWingFade.durations(milliseconds: -1).out == 0.3,
+                     "the fade's length stays in its range and damaged values take the default")
         var crowded = geometry
         crowded.compactSideRoom = 30
         suite.expect(crowded.compactAgentGeometry(wing: 57).compactActivityWingWidth == 0

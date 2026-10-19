@@ -903,6 +903,9 @@ enum DefaultsKey {
     static let notchHideInFullscreen = "notchHideInFullscreen"
     static let notchHideUntilHover = "notchHideUntilHover"
     static let notchCoversMenus = "notchCoversMenus"
+    /// How long, in milliseconds, a wing beside the camera takes to fade when
+    /// the pointer moves onto it; it returns a little slower.
+    static let notchWingFadeDuration = "notchWingFadeDuration"
     static let notchLowBatteryTint = "notchLowBatteryTint"
     static let notchLowBatteryThreshold = "notchLowBatteryThreshold"
     static let notchLowBatteryEarly = "notchLowBatteryEarly"
@@ -1499,6 +1502,7 @@ enum Defaults {
         DefaultsKey.notchHideInFullscreen: false,
         DefaultsKey.notchHideUntilHover: false,
         DefaultsKey.notchCoversMenus: true,
+        DefaultsKey.notchWingFadeDuration: NotchWingFade.defaultDuration,
         DefaultsKey.notchLowBatteryTint: false,
         DefaultsKey.notchLowBatteryThreshold: NotchSupport.defaultLowBatteryThreshold,
         DefaultsKey.notchLowBatteryEarly: false,

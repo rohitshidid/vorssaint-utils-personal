@@ -44,6 +44,7 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchHideInFullscreen) private var hideInFullscreen = false
     @AppStorage(DefaultsKey.notchHideUntilHover) private var hideUntilHover = false
     @AppStorage(DefaultsKey.notchCoversMenus) private var coversMenus = true
+    @AppStorage(DefaultsKey.notchWingFadeDuration) private var wingFadeDuration = NotchWingFade.defaultDuration
     @AppStorage(DefaultsKey.notchHoverDelay) private var hoverDelay = NotchSupport.defaultHoverDelay
     @AppStorage(DefaultsKey.notchCloseDelay) private var closeDelay = NotchSupport.defaultCloseDelay
     @AppStorage(DefaultsKey.notchReturnHome) private var returnHome = false
@@ -549,6 +550,7 @@ struct NotchSettings: View {
                 }
                 if restingChoice == .battery { lowBatteryControls }
                 switchRow("menubar.rectangle", text.coverMenus, caption: text.coverMenusHint, isOn: $coversMenus)
+                wingFadeRow
             }
             SettingsCard(title: editor.feedback) {
                 let volumeAvailable = AppFeature.mixer.isAvailable
@@ -971,6 +973,24 @@ struct NotchSettings: View {
     private func switchRow(_ symbol: String, _ title: String, caption: String? = nil, isOn: Binding<Bool>) -> some View {
         SettingsRow(symbol: symbol, title: title, caption: caption) {
             Toggle(title, isOn: isOn).labelsHidden().toggleStyle(.switch)
+        }
+    }
+
+    /// How long a wing takes to fade when the pointer moves onto it.
+    private var wingFadeRow: some View {
+        let bounded = Binding(
+            get: { NotchWingFade.durations(milliseconds: wingFadeDuration).out * 1000 },
+            set: { wingFadeDuration = $0 })
+        let readout = Measurement(value: bounded.wrappedValue, unit: UnitDuration.milliseconds)
+            .formatted(.measurement(width: .abbreviated, usage: .asProvided).locale(Locale(identifier: l10n.language.rawValue)))
+        return SettingsRow(symbol: "circle.lefthalf.filled", title: text.wingFade, caption: text.wingFadeHint) {
+            HStack(spacing: 8) {
+                Slider(value: bounded, in: NotchWingFade.durationRange, step: 50) { Text(text.wingFade) }
+                    .labelsHidden()
+                    .frame(width: 140)
+                    .accessibilityValue(readout)
+                Text(readout).monospacedDigit().foregroundStyle(.secondary).frame(minWidth: 52, alignment: .trailing)
+            }
         }
     }
 

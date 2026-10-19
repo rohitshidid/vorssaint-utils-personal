@@ -284,6 +284,7 @@ if (( TEST )); then
         Sources/Vorssaint/Core/NotchAgentStrings.swift
         Sources/Vorssaint/Core/CodexAccountStrings.swift
         Sources/Vorssaint/Core/ClaudeAccountStrings.swift
+        Sources/Vorssaint/Core/IslandCompanionStrings.swift
         Sources/Vorssaint/Services/Notch/NotchAgentSupport.swift
         Sources/Vorssaint/Core/NotchLockScreenStrings.swift
         Sources/Vorssaint/Services/Notch/NotchLockScreenSupport.swift
@@ -307,6 +308,8 @@ if (( TEST )); then
         Sources/Vorssaint/Services/AgentUsage/CodexProfileLimitsService.swift
         Sources/Vorssaint/Services/AgentUsage/ClaudeAccountLimits.swift
         Sources/Vorssaint/Services/AgentUsage/ClaudeProfileLimitsService.swift
+        Sources/Vorssaint/Services/AgentUsage/ClaudeAttention.swift
+        Sources/Vorssaint/Services/Notch/NotchDictation.swift
         Sources/Vorssaint/Services/AgentUsage/AgentOpenCodeReader.swift
         Sources/Vorssaint/Services/Notch/NotchGestureSupport.swift
         Sources/Vorssaint/Services/Notch/NotchSectionPaging.swift

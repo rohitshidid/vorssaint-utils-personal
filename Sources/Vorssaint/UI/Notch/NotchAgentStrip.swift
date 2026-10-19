@@ -12,6 +12,7 @@ struct NotchAgentStrip: View {
     /// another display's when the island shows on every display.
     var displayGeometry: NotchGeometry? = nil
     @ObservedObject private var usage = AgentUsageService.shared
+    @ObservedObject private var attention = ClaudeAttentionService.shared
     @ObservedObject private var l10n = L10n.shared
     @AppStorage(DefaultsKey.notchAgentsReadout) private var readout = NotchAgentReadout.elapsed.rawValue
     @AppStorage(DefaultsKey.notchAgentsLimitDisplay) private var display = NotchAgentLimitDisplay.remaining.rawValue
@@ -45,7 +46,12 @@ struct NotchAgentStrip: View {
             Button { service.openActivity(.agents) } label: {
                 HStack(spacing: 1) {
                     if geometry.compactActivityWingWidth >= 28 {
-                        ForEach(Array(working.enumerated()), id: \.offset) { NotchAgentGlyph(provider: $0.element, size: iconSize) }
+                        let waiting = Set(attention.waiting.map(\.id))
+                        ForEach(Array(NotchAgentSupport.stripSessions(live).enumerated()), id: \.offset) { _, session in
+                            NotchAgentGlyph(provider: session.provider, size: iconSize)
+                                .modifier(NotchWaitingPulse(active: session.provider == .claude
+                                    && waiting.contains(ClaudeAttentionSupport.session(ofLog: session.id))))
+                        }
                     }
                 }
                 .padding(.leading, iconInset)
@@ -98,6 +104,25 @@ struct NotchAgentStrip: View {
         return NotchAgentSupport.stripReading(snapshot, readout: NotchAgentReadout(rawValue: readout) ?? .elapsed,
                                               display: NotchAgentLimitDisplay(rawValue: display) ?? .remaining,
                                               focus: NotchAgentLimitFocus(rawValue: focus) ?? .mostUsed, now: now)
+    }
+}
+
+/// A session waiting on the person breathes until it is answered.
+private struct NotchWaitingPulse: ViewModifier {
+    let active: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        if active {
+            TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
+                let phase = reduceMotion ? 1 : 0.5 + 0.5 * sin(context.date.timeIntervalSinceReferenceDate * 4)
+                content
+                    .opacity(0.45 + 0.55 * phase)
+                    .shadow(color: .orange.opacity(0.9 * phase), radius: 4)
+            }
+        } else {
+            content
+        }
     }
 }
 

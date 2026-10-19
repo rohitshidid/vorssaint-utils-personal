@@ -20,6 +20,7 @@ struct NotchAgentsSettingsControls: View {
     @AppStorage(DefaultsKey.notchAgentsReadout) private var readout = NotchAgentReadout.elapsed.rawValue
     @AppStorage(DefaultsKey.notchAgentsFinishAlert) private var finishAlert = true
     @AppStorage(DefaultsKey.notchAgentsFinishMinimum) private var finishMinimum = NotchAgentSupport.defaultFinishMinimum
+    @AppStorage(DefaultsKey.notchAgentsAttentionAlert) private var attentionAlert = true
     @AppStorage(DefaultsKey.notchAgentsLimitAlert) private var limitAlert = true
     @AppStorage(DefaultsKey.notchAgentsLimitThreshold) private var limitThreshold = NotchAgentSupport.defaultLimitThreshold
     @AppStorage(DefaultsKey.notchAgentsDailyBudget) private var dailyBudget = 0.0
@@ -115,6 +116,12 @@ struct NotchAgentsSettingsControls: View {
                 }
                 .padding(.leading, settingsRowTextInset)
             }
+            if claude {
+                let attention = FeatureStrings.claudeAttention(l10n.language)
+                SettingsRow(symbol: "hand.raised", title: attention.alert, caption: attention.alertHint) {
+                    Toggle(attention.alert, isOn: $attentionAlert).labelsHidden().toggleStyle(.switch)
+                }
+            }
             switchRow("exclamationmark.triangle", text.limitAlert, isOn: $limitAlert)
             if limitAlert {
                 SettingsMenuRow(symbol: "gauge.with.dots.needle.67percent", title: text.limitAt, selection: $limitThreshold) {
@@ -159,6 +166,7 @@ struct NotchAgentsSettingsControls: View {
                        String(liveActivity), readout, limitDisplay, limitFocus]) { _, _ in
             NotchService.shared.syncWithPreferences()
         }
+        .onChange(of: attentionAlert) { _, _ in ClaudeAttentionService.shared.synchronize() }
     }
 
     private var priceCaption: String {

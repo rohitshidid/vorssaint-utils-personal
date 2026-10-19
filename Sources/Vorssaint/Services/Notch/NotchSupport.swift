@@ -1594,11 +1594,12 @@ enum NotchQuickAccessLayout {
 }
 
 enum NotchEvent: String, CaseIterable {
-    case volume, brightness, battery, clipboard, capture, systemNotification, keyboardLight, timer, accessory, download, agents, track, microphone, watch, inputSource
+    case volume, brightness, battery, clipboard, capture, systemNotification, keyboardLight, timer, accessory, download, agents, track, microphone, watch, inputSource, dictation
 
     var preferenceKey: String {
         switch self {
         case .microphone: return DefaultsKey.notchMicrophone
+        case .dictation: return DefaultsKey.notchDictation
         case .track: return DefaultsKey.notchTrackChange
         case .timer: return DefaultsKey.notchTimerEnabled
         case .watch: return DefaultsKey.notchWatchEnabled
@@ -1618,7 +1619,7 @@ enum NotchEvent: String, CaseIterable {
 
     var priority: Int {
         switch self {
-        case .volume, .brightness, .keyboardLight, .microphone, .inputSource: return 3
+        case .volume, .brightness, .keyboardLight, .microphone, .inputSource, .dictation: return 3
         case .capture, .timer, .watch: return 2
         case .battery, .systemNotification, .accessory, .agents: return 1
         case .clipboard, .download, .track: return 0
@@ -1628,6 +1629,9 @@ enum NotchEvent: String, CaseIterable {
     var duration: TimeInterval {
         switch self {
         case .volume, .brightness, .keyboardLight, .microphone, .inputSource: return 1.6
+        // Murmur keeps a recording's notice up while it lasts; this only
+        // clears one it stopped speaking for, as when it quits.
+        case .dictation: return 2.5
         case .systemNotification, .track: return 3
         case .timer, .download, .watch: return 6
         case .agents: return 5
@@ -2028,6 +2032,8 @@ enum NotchSupport {
         case .track: return modules(in: defaults).contains(.music)
         // A layout notice needs no feature of its own, only its own toggle.
         case .inputSource: return true
+        // Murmur, another app, records; the island only shows it.
+        case .dictation: return true
         }
     }
 

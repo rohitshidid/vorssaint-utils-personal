@@ -885,6 +885,7 @@ enum DefaultsKey {
     static let notchAgentsReadout = "notchAgentsReadout"
     static let notchAgentsFinishAlert = "notchAgentsFinishAlert"
     static let notchAgentsFinishMinimum = "notchAgentsFinishMinimum"
+    static let notchAgentsAttentionAlert = "notchAgentsAttentionAlert"
     static let notchAgentsLimitAlert = "notchAgentsLimitAlert"
     static let notchAgentsLimitThreshold = "notchAgentsLimitThreshold"
     static let notchAgentsDailyBudget = "notchAgentsDailyBudget"
@@ -925,6 +926,7 @@ enum DefaultsKey {
     static let notchVolume = "notchVolume"
     static let notchInputSource = "notchInputSource"
     static let notchMicrophone = "notchMicrophone"
+    static let notchDictation = "notchDictation"
     static let notchBrightness = "notchBrightness"
     static let notchBattery = "notchBattery"
     static let notchClipboard = "notchClipboard"
@@ -1477,6 +1479,7 @@ enum Defaults {
         DefaultsKey.notchAgentsReadout: NotchAgentReadout.elapsed.rawValue,
         DefaultsKey.notchAgentsFinishAlert: true,
         DefaultsKey.notchAgentsFinishMinimum: NotchAgentSupport.defaultFinishMinimum,
+        DefaultsKey.notchAgentsAttentionAlert: true,
         DefaultsKey.notchAgentsLimitAlert: true,
         DefaultsKey.notchAgentsLimitThreshold: NotchAgentSupport.defaultLimitThreshold,
         DefaultsKey.notchAgentsDailyBudget: 0.0,
@@ -1519,6 +1522,7 @@ enum Defaults {
         DefaultsKey.notchVolume: true,
         DefaultsKey.notchInputSource: true,
         DefaultsKey.notchMicrophone: true,
+        DefaultsKey.notchDictation: true,
         DefaultsKey.notchBrightness: true,
         DefaultsKey.notchBattery: true,
         DefaultsKey.notchClipboard: true,

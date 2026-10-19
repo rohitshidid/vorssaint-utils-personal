@@ -22,6 +22,12 @@ struct NotchNotice: Equatable {
     /// A banner that replaces one still on screen keeps at least its wings,
     /// so a burst of messages does not resize the island with each one.
     var minimumWings = NotchNoticeWings.zero
+    /// The Claude session that waits on the person; a click goes to it.
+    var claudeSession: ClaudeWaitingSession? = nil
+    /// Murmur's dictation, which draws its own mark and waveform.
+    var dictation: NotchDictationPhase? = nil
+    /// How long it stays when nothing replaces it, in place of its event's.
+    var duration: TimeInterval? = nil
 
     /// Each side as wide as what it shows, so neither ends in a band of
     /// empty black: the island reaches further toward its wider side.
@@ -1113,6 +1119,8 @@ final class NotchService: ObservableObject {
         // when it is turned off.
         if !NotchAgentSupport.isEnabled() { AgentUsageService.shared.stop() }
         guard !suspended else {
+            // Away, the island can show nothing: Murmur keeps its own overlay.
+            NotchDictationService.shared.stop()
             if session.canRunTimer { NotchTimerService.shared.syncWithPreferences() }
             else { NotchTimerService.shared.suspend() }
             NotchLockScreenService.shared.sync(session)
@@ -1128,6 +1136,7 @@ final class NotchService: ObservableObject {
         NotchNotificationService.shared.syncWithPreferences()
         NotchAudioLevelService.shared.syncWithPreferences()
         AgentUsageService.shared.syncWithPreferences()
+        NotchDictationService.shared.synchronize()
         followsPointer = displayPreference == .pointer || displayPreference == .all
         showsOnAllDisplays = displayPreference == .all
         updateFullscreenDisplays()
@@ -1217,6 +1226,7 @@ final class NotchService: ObservableObject {
         NotchLyricsService.shared.stop()
         NotchFileToolsService.shared.stop()
         AgentUsageService.shared.stop()
+        NotchDictationService.shared.stop()
         guard running else { return }
         running = false
         NotchTimerService.shared.stop()
@@ -2326,13 +2336,20 @@ final class NotchService: ObservableObject {
             inside = true
             holdNotification(id)
         } else {
-            scheduleNoticeDismissal(after: incoming.event.duration)
+            scheduleNoticeDismissal(after: incoming.duration ?? incoming.event.duration)
         }
         return true
     }
 
     func activateNotice(_ selectedNotice: NotchNotice) {
         guard notice == selectedNotice else { return }
+        if let session = selectedNotice.claudeSession {
+            ClaudeAttentionService.shared.reveal(session)
+            dismissNotice()
+            return
+        }
+        // Murmur's recording leads nowhere; Murmur itself is its page.
+        if selectedNotice.event == .dictation { return }
         if let id = selectedNotice.notificationID {
             guard NotchNotificationService.shared.openingID == nil else { return }
             // The pointer stays where the banner was; like a click on the
@@ -4024,6 +4041,22 @@ final class NotchService: ObservableObject {
             AgentUsageService.shared.events.receive(on: DispatchQueue.main)
                 .sink { [weak self] in self?.showAgentEvent($0) }
                 .store(in: &subscriptions)
+            let attention = ClaudeAttentionService.shared
+            attention.arrived
+                .sink { [weak self] in self?.showClaudeWaiting($0) }
+                .store(in: &subscriptions)
+            // A session answered in its own terminal takes its notice along.
+            attention.$waiting
+                .sink { [weak self] waiting in
+                    guard let self, let session = self.notice?.claudeSession,
+                          !waiting.contains(where: { $0.id == session.id }) else { return }
+                    self.dismissNotice()
+                }.store(in: &subscriptions)
+        }
+        if NotchSupport.routes(.dictation) {
+            NotchDictationService.shared.updates
+                .sink { [weak self] in self?.showDictation($0) }
+                .store(in: &subscriptions)
         }
         stopPower()
         if NotchSupport.routes(.volume) {
@@ -4061,6 +4094,43 @@ final class NotchService: ObservableObject {
         }
         // The companion loves being plugged in, so it listens for the charger too.
         if NotchSupport.routes(.battery) || idleContent == .battery || NotchMascotSupport.isEnabled() { startPower() }
+    }
+
+    /// Stays longer than other AI notices: it asks for something.
+    private func showClaudeWaiting(_ session: ClaudeWaitingSession) {
+        let text = FeatureStrings.claudeAttention(L10n.shared.language)
+        let place = session.project.isEmpty ? session.name : session.project
+        show(NotchNotice(event: .agents, title: text.needsYou(session.account ?? AgentProvider.claude.displayName),
+                         detail: [text.reason(session.reason), place].filter { !$0.isEmpty }.joined(separator: " · "),
+                         symbol: "hand.raised.fill", agent: .claude, claudeSession: session,
+                         duration: NotchAgentSupport.attentionDuration))
+    }
+
+    /// Murmur's recording, kept up while it lasts, and its word as it ends.
+    private func showDictation(_ update: NotchDictationUpdate) {
+        guard let phase = update.phase else {
+            // Back at rest: a recording still showing goes; a result stays its time.
+            if notice?.dictation?.isActive == true { dismissNotice() }
+            return
+        }
+        let text = FeatureStrings.dictation(L10n.shared.language)
+        switch phase {
+        case .listening(let locked, let command):
+            show(NotchNotice(event: .dictation, title: "",
+                             detail: command ? text.command : locked ? text.locked : text.listening,
+                             symbol: command ? "wand.and.stars" : locked ? "lock.fill" : "mic.fill",
+                             level: update.level, dictation: phase))
+        case .transcribing:
+            show(NotchNotice(event: .dictation, title: "", detail: text.transcribing, symbol: "waveform",
+                             level: 0, dictation: phase))
+        case .typed:
+            show(NotchNotice(event: .dictation, title: "", detail: text.typed, symbol: "checkmark",
+                             level: 0, dictation: phase, duration: 1.2))
+        case .message(let message, let isError):
+            show(NotchNotice(event: .dictation, title: message, detail: "",
+                             symbol: isError ? "exclamationmark.triangle.fill" : "checkmark.circle.fill",
+                             dictation: phase, duration: 2.4))
+        }
     }
 
     private func showAgentEvent(_ event: AgentUsageEvent) {

@@ -122,6 +122,8 @@ final class AgentUsageService: ObservableObject {
     func syncWithPreferences() {
         CodexProfileLimitsService.shared.synchronize()
         ClaudeProfileLimitsService.shared.synchronize()
+        // After the accounts, whose names it shows.
+        ClaudeAttentionService.shared.synchronize()
         guard NotchAgentSupport.isEnabled() else { stop(); return }
         let wanted = NotchAgentSupport.providers()
         // An agent turned off is no longer read at all, and one turned on is
@@ -148,6 +150,7 @@ final class AgentUsageService: ObservableObject {
     func pause() {
         CodexProfileLimitsService.shared.pause()
         ClaudeProfileLimitsService.shared.pause()
+        ClaudeAttentionService.shared.pause()
         // A page torn down with the island never reports leaving, so the
         // minute cadence would outlive it.
         pageVisible = false
@@ -182,6 +185,7 @@ final class AgentUsageService: ObservableObject {
         if pausingAccounts {
             CodexProfileLimitsService.shared.pause()
             ClaudeProfileLimitsService.shared.pause()
+            ClaudeAttentionService.shared.pause()
         }
         pageVisible = false
         // A first read still going stops at its next chunk, so the wait

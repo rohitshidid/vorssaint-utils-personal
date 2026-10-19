@@ -72,6 +72,9 @@ enum NotchAgentSupport {
     static let budgets = [0.0, 5, 10, 25, 50, 100, 250]
     /// A turn silent for this long is not shown as working.
     static let idleTurn: TimeInterval = 10 * 60
+    /// How long the word that a Claude session waits on the person stays,
+    /// unless it is answered first.
+    static let attentionDuration: TimeInterval = 12
 
     static func isEnabled(in defaults: UserDefaults = .standard) -> Bool {
         NotchSupport.isEnabled(in: defaults) && sectionShows(in: defaults)
@@ -227,7 +230,12 @@ enum NotchAgentSupport {
     /// One mark per working session, the longest-running first, so two Claude
     /// sessions read as two Claude marks.
     static func stripMarks(_ live: [AgentLiveSession]) -> [AgentProvider] {
-        live.sorted { ($0.started, $0.id) < ($1.started, $1.id) }.prefix(stripSessionLimit).map(\.provider)
+        stripSessions(live).map(\.provider)
+    }
+
+    /// The sessions behind those marks, in their order.
+    static func stripSessions(_ live: [AgentLiveSession]) -> [AgentLiveSession] {
+        Array(live.sorted { ($0.started, $0.id) < ($1.started, $1.id) }.prefix(stripSessionLimit))
     }
     /// Air between the camera and what sits beside it.
     static let stripCameraGap: CGFloat = 6

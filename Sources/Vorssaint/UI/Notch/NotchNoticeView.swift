@@ -19,6 +19,11 @@ struct NotchNoticeView: View {
         case .agents: return notice.symbol.hasPrefix("exclamationmark") ? .orange : notice.agent?.tint ?? .white
         // The timer's notice keeps the orange its strip and page wear.
         case .timer: return .orange
+        // Red means recording, as in Murmur; a refusal reads as a warning.
+        case .dictation:
+            if notice.dictation?.isListening == true { return .red }
+            if case .message(_, true) = notice.dictation { return .orange }
+            return .white
         default: return .white
         }
     }
@@ -124,6 +129,8 @@ struct NotchNoticeView: View {
                 .foregroundStyle(.white.opacity(0.85))
                 .lineLimit(NotchNotificationBannerLayout.messageLines(stripHeight: geometry.stripHeight))
                 .frame(maxWidth: .infinity, alignment: .trailing)
+        } else if let phase = notice.dictation, let level = notice.level {
+            NotchDictationWave(phase: phase, level: level)
         } else if let level = notice.level {
             NotchMeter(value: level, height: 5, tint: tint)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.14), value: level)
@@ -135,6 +142,50 @@ struct NotchNoticeView: View {
                 .lineLimit(1)
                 .truncationMode(notice.event == .accessory ? .middle : .tail)
                 .frame(maxWidth: .infinity, alignment: .trailing)
+        }
+    }
+}
+
+/// Murmur's voice as bars that follow the level while it listens, a wave
+/// passing through them while it transcribes, and a resting line once typed.
+private struct NotchDictationWave: View {
+    let phase: NotchDictationPhase
+    let level: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Taller in the middle, as a voice reads.
+    private static let profile: [Double] = [0.45, 0.62, 0.8, 0.94, 1, 0.94, 0.8, 0.62, 0.45]
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion || !phase.isActive)) { context in
+            let time = context.date.timeIntervalSinceReferenceDate
+            HStack(alignment: .center, spacing: 2.5) {
+                ForEach(Self.profile.indices, id: \.self) { index in
+                    Capsule()
+                        .fill(Color.white.opacity(phase.isListening ? 1 : 0.7))
+                        .frame(width: 2.5, height: height(index, at: time))
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: level)
+    }
+
+    private func height(_ index: Int, at time: TimeInterval) -> CGFloat {
+        let rest: CGFloat = 3, tallest: CGFloat = 16
+        let shape = Self.profile[index]
+        switch phase {
+        case .listening:
+            // A little life on top of the level, so a steady voice does not
+            // freeze the bars.
+            let flutter = reduceMotion ? 1 : 0.75 + 0.25 * sin(time * 9 + Double(index) * 1.7)
+            let loud = min(1, level.squareRoot() * 1.15)
+            return rest + (tallest - rest) * CGFloat(loud * shape * flutter)
+        case .transcribing:
+            let wave = reduceMotion ? 0.5 : 0.5 + 0.5 * sin(time * 6 - Double(index) * 0.7)
+            return rest + (tallest * 0.55 - rest) * CGFloat(wave * shape)
+        case .typed, .message:
+            return rest
         }
     }
 }

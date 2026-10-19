@@ -133,10 +133,11 @@ final class NotchWindowHost: NSObject, CAAnimationDelegate {
         if panel.ignoresMouseEvents != effective { panel.ignoresMouseEvents = effective }
     }
 
-    /// Fades the wing the pointer is on and lets its clicks through to the
-    /// menu bar icons beneath; nil brings it back.
-    func setFadedWing(_ side: NotchWingSide?, cameraWidth: CGFloat) {
-        canvas.setWingFade(side, cameraWidth: cameraWidth)
+    /// Fades the wing the pointer is on, down to the notch's own shape
+    /// `cutout`, and lets its clicks through to the menu bar icons beneath;
+    /// nil brings it back.
+    func setFadedWing(_ side: NotchWingSide?, cutout: CGSize) {
+        canvas.setWingFade(side, cutout: cutout)
         guard wingPassThrough != (side != nil) else { return }
         wingPassThrough = side != nil
         setMouseEventsIgnored(requestedMouseEventsIgnored)
@@ -1030,15 +1031,16 @@ private final class NotchCanvas: NSView {
     private let silhouette = CAShapeLayer()
     private let edge = CAShapeLayer()
     private let edgeMask = CALayer()
-    /// The silhouette's own mask while a wing is faded: the camera's column
-    /// and each wing's, so one wing fades with its background and the rest
-    /// stays. Off the silhouette otherwise, so nothing else is masked twice.
+    /// The silhouette's own mask while a wing is faded: each half of the
+    /// island, split at the camera's centre, over the notch's own shape, so
+    /// a faded half ends in the notch's curve and the other half stays whole.
+    /// Off the silhouette otherwise, so nothing else is masked twice.
     private let wingMask = CALayer()
     private let wingLeading = CALayer()
-    private let wingCentre = CALayer()
+    private let wingCentre = CAShapeLayer()
     private let wingTrailing = CALayer()
     private var fadedWing: NotchWingSide?
-    private var wingCameraWidth: CGFloat = 0
+    private var wingCutout = CGSize.zero
     /// Nil hangs the island from the top edge; a capsule floats this far inside it.
     private(set) var floatingGap: CGFloat?
     /// The size the silhouette's model path was drawn for.
@@ -1319,17 +1321,20 @@ private final class NotchCanvas: NSView {
         return super.hitTest(point)
     }
 
-    func setWingFade(_ side: NotchWingSide?, cameraWidth: CGFloat) {
-        guard side != fadedWing || (side != nil && cameraWidth != wingCameraWidth) else { return }
+    func setWingFade(_ side: NotchWingSide?, cutout: CGSize) {
+        guard side != fadedWing || (side != nil && cutout != wingCutout) else { return }
         fadedWing = side
-        wingCameraWidth = cameraWidth
+        wingCutout = cutout
         if side != nil, silhouette.mask == nil {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
-            for column in [wingLeading, wingCentre, wingTrailing] {
-                column.backgroundColor = NSColor.black.cgColor
-                column.opacity = 1
-                if column.superlayer == nil { wingMask.addSublayer(column) }
+            for half in [wingLeading, wingTrailing] {
+                half.backgroundColor = NSColor.black.cgColor
+                half.opacity = 1
+            }
+            wingCentre.fillColor = NSColor.black.cgColor
+            for layer in [wingCentre, wingLeading, wingTrailing] where layer.superlayer == nil {
+                wingMask.addSublayer(layer)
             }
             layoutWingMask()
             silhouette.mask = wingMask
@@ -1357,17 +1362,17 @@ private final class NotchCanvas: NSView {
         CATransaction.commit()
     }
 
-    /// The three columns in the silhouette's space, whose middle is the
-    /// camera's centre: the silhouette is laid out around it.
+    /// The halves in the silhouette's space, whose middle is the camera's
+    /// centre, and the notch drawn as the island draws itself at that size.
     private func layoutWingMask() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let bounds = silhouette.bounds
-        let half = min(bounds.width / 2, max(0, wingCameraWidth / 2))
         wingMask.frame = bounds
-        wingLeading.frame = CGRect(x: 0, y: 0, width: bounds.midX - half, height: bounds.height)
-        wingCentre.frame = CGRect(x: bounds.midX - half, y: 0, width: half * 2, height: bounds.height)
-        wingTrailing.frame = CGRect(x: bounds.midX + half, y: 0, width: bounds.width / 2 - half, height: bounds.height)
+        wingLeading.frame = CGRect(x: 0, y: 0, width: bounds.midX, height: bounds.height)
+        wingTrailing.frame = CGRect(x: bounds.midX, y: 0, width: bounds.width - bounds.midX, height: bounds.height)
+        wingCentre.frame = bounds
+        wingCentre.path = wingCutout.width > 0 && wingCutout.height > 0 ? silhouettePath(for: wingCutout) : nil
         CATransaction.commit()
     }
 

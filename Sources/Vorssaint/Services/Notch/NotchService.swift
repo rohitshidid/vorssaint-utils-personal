@@ -1556,7 +1556,7 @@ final class NotchService: ObservableObject {
     private func applyFadedWing(_ side: NotchWingSide?) {
         guard side != fadedWing else { return }
         fadedWing = side
-        windowHost?.setFadedWing(side, cameraWidth: geometry.cameraWidth)
+        windowHost?.setFadedWing(side, cutout: geometry.bareCutout)
         // The island's own hover follows: off on a wing, back over the camera.
         hover(side == nil && windowHost?.containsHover(NSEvent.mouseLocation) == true)
     }

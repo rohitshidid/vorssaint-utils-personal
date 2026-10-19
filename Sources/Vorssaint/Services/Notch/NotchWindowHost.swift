@@ -118,13 +118,28 @@ final class NotchWindowHost: NSObject, CAAnimationDelegate {
         return concealedForMissionControl
     }
 
+    /// The click-through policy asked for, apart from a faded wing's.
+    private var requestedMouseEventsIgnored = false
+    /// A wing under the pointer is faded and lets clicks reach the menu bar.
+    private var wingPassThrough = false
+
     func setMouseEventsIgnored(_ ignored: Bool) {
+        requestedMouseEventsIgnored = ignored
         // Capture controls can change their click-through policy while the
         // island is concealed or on its way out. Keep that policy for restore.
         if concealedForMissionControl { missionControlMouseEvents = ignored }
         if mouseEventsBeforeHide != nil { mouseEventsBeforeHide = ignored }
-        let effective = ignored || concealedForMissionControl || hidesWhenSettled
+        let effective = ignored || concealedForMissionControl || hidesWhenSettled || wingPassThrough
         if panel.ignoresMouseEvents != effective { panel.ignoresMouseEvents = effective }
+    }
+
+    /// Fades the wing the pointer is on and lets its clicks through to the
+    /// menu bar icons beneath; nil brings it back.
+    func setFadedWing(_ side: NotchWingSide?, cameraWidth: CGFloat) {
+        canvas.setWingFade(side, cameraWidth: cameraWidth)
+        guard wingPassThrough != (side != nil) else { return }
+        wingPassThrough = side != nil
+        setMouseEventsIgnored(requestedMouseEventsIgnored)
     }
 
     func setOutline(enabled: Bool, color: NSColor) {
@@ -1015,6 +1030,15 @@ private final class NotchCanvas: NSView {
     private let silhouette = CAShapeLayer()
     private let edge = CAShapeLayer()
     private let edgeMask = CALayer()
+    /// The silhouette's own mask while a wing is faded: the camera's column
+    /// and each wing's, so one wing fades with its background and the rest
+    /// stays. Off the silhouette otherwise, so nothing else is masked twice.
+    private let wingMask = CALayer()
+    private let wingLeading = CALayer()
+    private let wingCentre = CALayer()
+    private let wingTrailing = CALayer()
+    private var fadedWing: NotchWingSide?
+    private var wingCameraWidth: CGFloat = 0
     /// Nil hangs the island from the top edge; a capsule floats this far inside it.
     private(set) var floatingGap: CGFloat?
     /// The size the silhouette's model path was drawn for.
@@ -1293,6 +1317,52 @@ private final class NotchCanvas: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard containsVisiblePoint(convert(point, from: superview)) else { return nil }
         return super.hitTest(point)
+    }
+
+    func setWingFade(_ side: NotchWingSide?, cameraWidth: CGFloat) {
+        guard side != fadedWing || (side != nil && cameraWidth != wingCameraWidth) else { return }
+        fadedWing = side
+        wingCameraWidth = cameraWidth
+        if side != nil, silhouette.mask == nil {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            for column in [wingLeading, wingCentre, wingTrailing] {
+                column.backgroundColor = NSColor.black.cgColor
+                column.opacity = 1
+                if column.superlayer == nil { wingMask.addSublayer(column) }
+            }
+            layoutWingMask()
+            silhouette.mask = wingMask
+            CATransaction.commit()
+        }
+        guard silhouette.mask != nil else { return }
+        layoutWingMask()
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(0.18)
+        if side == nil {
+            // Back in full: the mask goes once the wing has faded back in.
+            CATransaction.setCompletionBlock { [weak self] in
+                guard let self, self.fadedWing == nil else { return }
+                self.silhouette.mask = nil
+            }
+        }
+        wingLeading.opacity = side == .leading ? 0 : 1
+        wingTrailing.opacity = side == .trailing ? 0 : 1
+        CATransaction.commit()
+    }
+
+    /// The three columns in the silhouette's space, whose middle is the
+    /// camera's centre: the silhouette is laid out around it.
+    private func layoutWingMask() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        let bounds = silhouette.bounds
+        let half = min(bounds.width / 2, max(0, wingCameraWidth / 2))
+        wingMask.frame = bounds
+        wingLeading.frame = CGRect(x: 0, y: 0, width: bounds.midX - half, height: bounds.height)
+        wingCentre.frame = CGRect(x: bounds.midX - half, y: 0, width: half * 2, height: bounds.height)
+        wingTrailing.frame = CGRect(x: bounds.midX + half, y: 0, width: bounds.width / 2 - half, height: bounds.height)
+        CATransaction.commit()
     }
 
     override func mouseEntered(with event: NSEvent) {
@@ -1737,6 +1807,7 @@ private final class NotchCanvas: NSView {
         if silhouette.frame != maskFrame {
             silhouette.frame = maskFrame
             edge.frame = maskFrame
+            if silhouette.mask != nil { layoutWingMask() }
         }
         silhouetteSize = motionStart ?? contentSize
         silhouette.path = silhouettePath(for: silhouetteSize, offset: motionStart == nil ? 0 : motionStartOffset)

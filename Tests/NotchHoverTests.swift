@@ -84,6 +84,8 @@ enum NotchHoverTests {
     }
     class State {
         var noticeFitsInPlace = false
+        /// Wings fade under the pointer in the app; this fixture shows none.
+        func wingSide(at point: CGPoint) -> NotchWingSide? { nil }
         func schedulePointerFollow() {}
         var hiddenInFullscreen = false
         var fullscreenCompact: Bool { hiddenInFullscreen && !expanded && !peeking }

@@ -97,6 +97,8 @@ enum NotchPresentationRefreshContract {
     }
     final class Host {
         let panel = Panel()
+        var requestedMouseEventsIgnored = false
+        var wingPassThrough = false
         var departsContent = false
         func finishDeparture() { departsContent = false }
         var concealedForMissionControl = false
@@ -158,6 +160,8 @@ enum NotchPresentationRefreshContract {
     }
     class State: ObservableObject {
         var noticeFitsInPlace = false
+        /// Wings fade under the pointer in the app; this contract shows none.
+        func syncWingFade() {}
         var activitySelection = NotchActivitySelection()
         var compactActivities: [NotchCompactActivity] = []
         func compactCompanions(of primary: NotchCompactActivity) -> [NotchCompactActivity] { [] }

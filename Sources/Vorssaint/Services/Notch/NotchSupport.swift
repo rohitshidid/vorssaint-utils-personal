@@ -2997,6 +2997,28 @@ struct NotchGlassFade: Equatable {
 }
 
 /// Free room on both sides of the camera, in Cocoa screen coordinates.
+/// A side of the closed island beyond the camera.
+enum NotchWingSide: Equatable {
+    case leading, trailing
+}
+
+/// A wing shown over the menu bar hides the icons beneath it. While the
+/// pointer is on one, that wing fades and lets clicks through to them; the
+/// camera's part, and the other wing, stay as they are.
+enum NotchWingFade {
+    /// The wing of the island at `frame` the point is on; nil over the camera
+    /// or off the island. The top edge belongs to the island, as in
+    /// `NotchGeometry.contains`.
+    static func side(of point: CGPoint, island frame: CGRect, cameraMidX: CGFloat,
+                     cameraWidth: CGFloat) -> NotchWingSide? {
+        guard point.x >= frame.minX, point.x < frame.maxX, point.y > frame.minY, point.y <= frame.maxY,
+              cameraWidth > 0 else { return nil }
+        if point.x < cameraMidX - cameraWidth / 2 { return .leading }
+        if point.x >= cameraMidX + cameraWidth / 2 { return .trailing }
+        return nil
+    }
+}
+
 /// Unknown/occupied camera space is distinct from a known zero-width wing.
 enum NotchMenuBarLayout {
     /// A successful AX read can contain menu items from another display.

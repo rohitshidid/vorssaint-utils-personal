@@ -382,7 +382,8 @@ struct NotchLockScreenActivities: View {
                 .accessibilityLabel(countdown.ongoing ? text.ongoing : text.next)
             }
         case .agents:
-            let working = AgentProvider.allCases.filter { provider in usage.snapshot.live.contains { $0.provider == provider } }
+            let marks = NotchAgentSupport.stripMarks(usage.snapshot.live)
+            let working = AgentProvider.allCases.filter(marks.contains)
             let reading = NotchAgentSupport.stripReading(usage.snapshot, readout: NotchAgentReadout(rawValue: readout) ?? .elapsed,
                                                          display: NotchAgentLimitDisplay(rawValue: display) ?? .remaining,
                                                          focus: NotchAgentLimitFocus(rawValue: focus) ?? .mostUsed, now: date)
@@ -390,7 +391,7 @@ struct NotchLockScreenActivities: View {
             // a screen anyone can walk up to.
             HStack(spacing: 7) {
                 HStack(spacing: 1) {
-                    ForEach(working) { NotchAgentGlyph(provider: $0, size: 13) }
+                    ForEach(Array(marks.enumerated()), id: \.offset) { NotchAgentGlyph(provider: $0.element, size: 13) }
                 }
                 Text(working.map(\.displayName).joined(separator: " · ") + " " + reading)
             }

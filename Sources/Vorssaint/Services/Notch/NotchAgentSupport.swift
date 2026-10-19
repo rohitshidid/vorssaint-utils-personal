@@ -220,6 +220,15 @@ enum NotchAgentSupport {
     /// A wing is never narrower than the music strip's, nor wide enough to
     /// crowd the menus beside the camera.
     static let stripWingRange: ClosedRange<CGFloat> = 44...80
+    /// Sessions the closed island gives a mark of their own; the clock counts
+    /// every other session after it.
+    static let stripSessionLimit = 3
+
+    /// One mark per working session, the longest-running first, so two Claude
+    /// sessions read as two Claude marks.
+    static func stripMarks(_ live: [AgentLiveSession]) -> [AgentProvider] {
+        live.sorted { ($0.started, $0.id) < ($1.started, $1.id) }.prefix(stripSessionLimit).map(\.provider)
+    }
     /// Air between the camera and what sits beside it.
     static let stripCameraGap: CGFloat = 6
 
@@ -231,7 +240,11 @@ enum NotchAgentSupport {
                              display: NotchAgentLimitDisplay, focus: NotchAgentLimitFocus = .mostUsed,
                              now: Date) -> String {
         let live = snapshot.live
-        func elapsed() -> String { AgentFormat.clock(now.timeIntervalSince(live.map(\.started).min() ?? now)) }
+        // The longest-running session's clock, and how many others work beside it.
+        func elapsed() -> String {
+            let clock = AgentFormat.clock(now.timeIntervalSince(live.map(\.started).min() ?? now))
+            return live.count > 1 ? clock + " +\(live.count - 1)" : clock
+        }
         switch readout {
         case .elapsed:
             return elapsed()

@@ -388,7 +388,9 @@ private struct NotchCapsuleAgentMarks: View {
 
     var body: some View {
         HStack(spacing: 1) {
-            ForEach(providers) { NotchAgentGlyph(provider: $0, size: CapsuleLayout.agentMarkSize(working: providers.count)) }
+            ForEach(Array(providers.enumerated()), id: \.offset) {
+                NotchAgentGlyph(provider: $0.element, size: CapsuleLayout.agentMarkSize(working: providers.count))
+            }
         }
     }
 }
@@ -447,8 +449,9 @@ struct NotchCapsuleAgentStrip: View {
     @AppStorage(DefaultsKey.notchAgentsLimitDisplay) private var display = NotchAgentLimitDisplay.remaining.rawValue
     @AppStorage(DefaultsKey.notchAgentsLimitFocus) private var focus = NotchAgentLimitFocus.mostUsed.rawValue
 
+    /// One mark per session, as on the notch.
     private func working(_ live: [AgentLiveSession]) -> [AgentProvider] {
-        AgentProvider.allCases.filter { provider in live.contains { $0.provider == provider } }
+        NotchAgentSupport.stripMarks(live)
     }
 
     var body: some View {

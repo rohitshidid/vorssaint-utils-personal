@@ -17,8 +17,9 @@ struct NotchAgentStrip: View {
     @AppStorage(DefaultsKey.notchAgentsLimitDisplay) private var display = NotchAgentLimitDisplay.remaining.rawValue
     @AppStorage(DefaultsKey.notchAgentsLimitFocus) private var focus = NotchAgentLimitFocus.mostUsed.rawValue
 
+    /// One mark per session, so two Claude sessions show two Claude marks.
     private func working(_ live: [AgentLiveSession]) -> [AgentProvider] {
-        AgentProvider.allCases.filter { provider in live.contains { $0.provider == provider } }
+        NotchAgentSupport.stripMarks(live)
     }
 
     var body: some View {
@@ -44,7 +45,7 @@ struct NotchAgentStrip: View {
             Button { service.openActivity(.agents) } label: {
                 HStack(spacing: 1) {
                     if geometry.compactActivityWingWidth >= 28 {
-                        ForEach(working) { NotchAgentGlyph(provider: $0, size: iconSize) }
+                        ForEach(Array(working.enumerated()), id: \.offset) { NotchAgentGlyph(provider: $0.element, size: iconSize) }
                     }
                 }
                 .padding(.leading, iconInset)

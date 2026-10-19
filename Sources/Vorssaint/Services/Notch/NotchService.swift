@@ -202,6 +202,10 @@ final class NotchService: ObservableObject {
     private var captureClosesOnCollapse = false
     private var inside = false
     private var hoverEmphasized = false
+    /// The wing faded under the pointer, and the pointer watch that finds it
+    /// while a compact activity shows beside the camera.
+    private var fadedWing: NotchWingSide?
+    private var wingMonitors: [Any] = []
     private var activitySelection = NotchActivitySelection()
     private var activityPickerMenuOpen = false
     private var hoverState = NotchHoverState()
@@ -749,9 +753,9 @@ final class NotchService: ObservableObject {
             .font: NSFont.monospacedDigitSystemFont(ofSize: size, weight: .medium)
         ]).width
         let reading = width.rounded(.up) + provisional.compactActivityEdgeInset(boxHeight: size * 0.72, radius: 0)
-        // The marks on the other side, drawn as the strip draws them: two
-        // working agents share a smaller size, each in a frame wider than it.
-        let working = Set(AgentUsageService.shared.snapshot.live.map(\.provider)).count
+        // The marks on the other side, drawn as the strip draws them, one per
+        // session: two share a smaller size, each in a frame wider than it.
+        let working = NotchAgentSupport.stripMarks(AgentUsageService.shared.snapshot.live).count
         let mark = CGFloat(working > 1 ? 11 : 14)
         let frame = mark * 1.45 + 1
         let marks = CGFloat(max(1, working)) * frame + CGFloat(max(0, working - 1))
@@ -1024,7 +1028,9 @@ final class NotchService: ObservableObject {
             let reading = NotchAgentSupport.stripReading(AgentUsageService.shared.snapshot, readout: NotchAgentSupport.readout(),
                                                          display: NotchAgentSupport.limitDisplay(),
                                                          focus: NotchAgentSupport.limitFocus(), now: Date())
-            return layout.agentSurface(reading: reading, working: working, geometry: geometry)
+            return layout.agentSurface(reading: reading,
+                                       working: NotchAgentSupport.stripMarks(AgentUsageService.shared.snapshot.live).count,
+                                       geometry: geometry)
         case .calendar:
             guard let countdown = NotchCalendarService.shared.countdown else { return geometry.restingSize(showsContent: false) }
             if let companion {
@@ -1501,6 +1507,65 @@ final class NotchService: ObservableObject {
         return true
     }
 
+    // MARK: Wing fade
+
+    /// Whether the island shows a compact activity in wings beside the
+    /// camera, which may sit over menu bar icons.
+    private var showsActivityWings: Bool {
+        running && !suspended && !expanded && !peeking && !hiddenUntilHover && notice == nil && captureControls == nil
+            && capsuleSurfaceSize == nil && compactActivity != nil && windowHost != nil
+            && compactActivityGeometry.compactActivityWingWidth > 0
+    }
+
+    /// The wing of the closed island the pointer is on, while it shows one.
+    private func wingSide(at point: CGPoint) -> NotchWingSide? {
+        guard showsActivityWings else { return nil }
+        return NotchWingFade.side(of: point, island: geometry.frame(for: surfaceSize),
+                                  cameraMidX: geometry.screen.midX, cameraWidth: geometry.cameraWidth)
+    }
+
+    /// Watches the pointer only while wings show: the island ignores clicks
+    /// on a faded wing, so its own tracking cannot see the pointer leave it.
+    private func syncWingFade() {
+        guard showsActivityWings else {
+            removeWingMonitors()
+            applyFadedWing(nil)
+            return
+        }
+        if wingMonitors.isEmpty {
+            let events: NSEvent.EventTypeMask = [.mouseMoved, .leftMouseDragged]
+            if let global = NSEvent.addGlobalMonitorForEvents(matching: events, handler: { [weak self] _ in
+                self?.pointerMovedNearWings()
+            }) { wingMonitors.append(global) }
+            if let local = NSEvent.addLocalMonitorForEvents(matching: events, handler: { [weak self] event in
+                self?.pointerMovedNearWings()
+                return event
+            }) { wingMonitors.append(local) }
+        }
+        applyFadedWing(wingSide(at: NSEvent.mouseLocation))
+    }
+
+    private func pointerMovedNearWings() {
+        // Most moves are nowhere near the menu bar; they cost one comparison.
+        let point = NSEvent.mouseLocation
+        guard fadedWing != nil || point.y >= geometry.screen.maxY - geometry.menuBarHeight * 2 else { return }
+        guard showsActivityWings else { syncWingFade(); return }
+        applyFadedWing(wingSide(at: point))
+    }
+
+    private func applyFadedWing(_ side: NotchWingSide?) {
+        guard side != fadedWing else { return }
+        fadedWing = side
+        windowHost?.setFadedWing(side, cameraWidth: geometry.cameraWidth)
+        // The island's own hover follows: off on a wing, back over the camera.
+        hover(side == nil && windowHost?.containsHover(NSEvent.mouseLocation) == true)
+    }
+
+    private func removeWingMonitors() {
+        wingMonitors.forEach(NSEvent.removeMonitor)
+        wingMonitors.removeAll()
+    }
+
     func hover(_ entered: Bool) {
         guard running, !suspended, !hiddenAtRestInFullscreen else { removeHoverExitMonitors(); return }
         let point = NSEvent.mouseLocation
@@ -1509,6 +1574,8 @@ final class NotchService: ObservableObject {
         inside = hiddenUntilHover ? geometry.contains(point, in: geometry.collapsed)
             && windowHost?.isConcealedForMissionControl == false
             : windowHost?.containsHover(point) == true || pointerOverChildWindow(point)
+        // A faded wing belongs to the menu bar beneath it, not the island.
+        if inside, wingSide(at: point) != nil { inside = false }
         hoverState.update(pointerInside: inside)
         // The music strip names its song only while the pointer stays on the
         // island: leaving ends it, and a name left from before goes on return.
@@ -2533,6 +2600,7 @@ final class NotchService: ObservableObject {
     }
 
     func refreshPresentation(animated: Bool = true, transitionContent: NotchContentTransition = .none) {
+        defer { syncWingFade() }
         // A notice with a new reading, or the music strip naming its song,
         // fits its new width in place.
         let fitsInPlace = noticeFitsInPlace && notice != nil && !noticeExpanded

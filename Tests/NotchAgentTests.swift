@@ -2470,8 +2470,22 @@ enum NotchAgentTests {
         let short = snapshot([session(.claude, startedAgo: 754)])
         let long = snapshot([session(.claude, startedAgo: 3723), session(.codex, startedAgo: 60)])
         suite.expect(NotchAgentSupport.stripReading(short, readout: .elapsed, display: .remaining, now: now) == "12:34"
-                        && NotchAgentSupport.stripReading(long, readout: .elapsed, display: .remaining, now: now) == "1:02:03",
-                     "the strip counts from the earliest turn still working")
+                        && NotchAgentSupport.stripReading(long, readout: .elapsed, display: .remaining, now: now) == "1:02:03 +1",
+                     "the strip counts from the earliest turn still working, and counts the others after it")
+        func claude(_ id: String, startedAgo: TimeInterval) -> AgentLiveSession {
+            AgentLiveSession(id: id, provider: .claude, started: now.addingTimeInterval(-startedAgo), lastActivity: now,
+                             model: "claude-opus-5-5", project: "app", tokens: AgentTokens(), cost: 0)
+        }
+        let twoClaudes = [claude("work", startedAgo: 61), claude("personal", startedAgo: 754)]
+        suite.expect(NotchAgentSupport.stripMarks(twoClaudes) == [.claude, .claude]
+                        && NotchAgentSupport.stripReading(snapshot(twoClaudes), readout: .elapsed, display: .remaining, now: now)
+                            == "12:34 +1",
+                     "two Claude sessions show two Claude marks and the longest one's clock, plus one")
+        let many = twoClaudes + [claude("third", startedAgo: 30), claude("fourth", startedAgo: 5)]
+        suite.expect(NotchAgentSupport.stripMarks(many).count == NotchAgentSupport.stripSessionLimit
+                        && NotchAgentSupport.stripReading(snapshot(many), readout: .elapsed, display: .remaining, now: now)
+                            == "12:34 +3",
+                     "marks stop at the strip's room while the clock counts every other session")
         suite.expect(NotchAgentSupport.stripReading(short, readout: .cost, display: .remaining, now: now) == AgentFormat.cost(4.56)
                         && NotchAgentSupport.stripReading(long, readout: .tokens, display: .remaining, now: now)
                             == AgentFormat.tokens(600),
@@ -2540,6 +2554,17 @@ enum NotchAgentTests {
         suite.expect(geometry.compactAgentGeometry(wing: 12).compactActivityWingWidth == 44
                         && geometry.compactAgentGeometry(wing: 300).compactActivityWingWidth == 80,
                      "a wing is never narrower than the music strip's nor wider than the menus allow")
+        // An island 300 wide over a 200 wide camera at x 1000, 32 tall at the screen's top (982).
+        let island = CGRect(x: 850, y: 950, width: 300, height: 32)
+        func side(_ x: CGFloat, _ y: CGFloat = 970) -> NotchWingSide? {
+            NotchWingFade.side(of: CGPoint(x: x, y: y), island: island, cameraMidX: 1000, cameraWidth: 200)
+        }
+        suite.expect(side(860) == .leading && side(899.5) == .leading && side(900) == nil && side(1099) == nil
+                        && side(1100) == .trailing && side(1149) == .trailing,
+                     "the pointer is on a wing only beside the camera, never over it")
+        suite.expect(side(849) == nil && side(1150) == nil && side(860, 949) == nil && side(860, 982) == .leading
+                        && NotchWingFade.side(of: CGPoint(x: 860, y: 970), island: island, cameraMidX: 1000, cameraWidth: 0) == nil,
+                     "off the island nothing fades, and the top edge belongs to the island")
         var crowded = geometry
         crowded.compactSideRoom = 30
         suite.expect(crowded.compactAgentGeometry(wing: 57).compactActivityWingWidth == 0

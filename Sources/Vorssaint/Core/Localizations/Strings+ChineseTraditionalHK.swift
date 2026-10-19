@@ -1096,6 +1096,7 @@ extension Strings {
         switcherCurrentDisplayOnlyCaption: "只顯示游標所在螢幕上的視窗。如果該螢幕沒有視窗，切換器不會開啟。",
         smoothScrollResponseLabel: "反應速度",
         smoothScrollCoastLabel: "慣性",
+        smoothScrollAccelerationLabel: "加速",
         mouseAccelerationName: "關閉滑鼠加速",
         mouseAccelerationCaption: "移除已連接滑鼠的指標加速。關閉此選項或結束 Vorssaint 後，會還原之前的設定。",
         linearScrollName: "線性捲動",

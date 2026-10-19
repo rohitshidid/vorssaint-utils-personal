@@ -1095,6 +1095,7 @@ extension Strings {
         switcherCurrentDisplayOnlyCaption: "ポインタがある画面のウインドウだけを表示します。その画面にウインドウがない場合、スイッチャーは開きません。",
         smoothScrollResponseLabel: "反応",
         smoothScrollCoastLabel: "慣性",
+        smoothScrollAccelerationLabel: "加速",
         mouseAccelerationName: "マウス加速を無効にする",
         mouseAccelerationCaption: "接続したマウスのポインタ加速を無効にします。オフにするか Vorssaint を終了すると以前の設定に戻ります。",
         linearScrollName: "リニアスクロール",

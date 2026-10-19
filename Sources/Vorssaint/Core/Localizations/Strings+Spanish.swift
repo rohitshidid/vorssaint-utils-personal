@@ -1095,6 +1095,7 @@ extension Strings {
         switcherCurrentDisplayOnlyCaption: "Muestra solo las ventanas de la pantalla bajo el puntero. Si esa pantalla no tiene ventanas, el selector no se abre.",
         smoothScrollResponseLabel: "Respuesta",
         smoothScrollCoastLabel: "Inercia",
+        smoothScrollAccelerationLabel: "Aceleración",
         mouseAccelerationName: "Desactivar la aceleración del ratón",
         mouseAccelerationCaption: "Elimina la aceleración del puntero para los ratones conectados. El ajuste anterior vuelve al desactivarlo o salir de Vorssaint.",
         linearScrollName: "Desplazamiento lineal",

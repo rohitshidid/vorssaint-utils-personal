@@ -62,6 +62,7 @@ enum SmoothScrollRoutingTests {
         var currentFlags: CGEventFlags = []
         var currentScrollRedirected = false, glideFromContinuous = false
         var lastGesturePhaseTimestamp: UInt64?
+        var lastNotch: (timestamp: UInt64, vertical: Bool, sign: Double)?
         var scheduled = false
         func startGlideIfNeeded() { scheduled = true }
         func stopFrameScheduler() { scheduled = false; lastFrameTimestamp = nil }

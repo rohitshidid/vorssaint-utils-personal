@@ -1095,6 +1095,7 @@ extension Strings {
         switcherCurrentDisplayOnlyCaption: "Yalnızca işaretçinin bulunduğu ekrandaki pencereleri gösterir. O ekranda pencere yoksa değiştirici açılmaz.",
         smoothScrollResponseLabel: "Tepki",
         smoothScrollCoastLabel: "Atalet",
+        smoothScrollAccelerationLabel: "Hızlanma",
         mouseAccelerationName: "Fare hızlandırmasını kapat",
         mouseAccelerationCaption: "Bağlı farelerde işaretçi hızlandırmasını kaldırır. Seçenek kapatıldığında veya Vorssaint’ten çıkıldığında önceki ayar geri yüklenir.",
         linearScrollName: "Doğrusal kaydırma",

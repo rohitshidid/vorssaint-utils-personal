@@ -65,6 +65,9 @@ final class SmoothScrollService: ObservableObject {
     /// Timestamp (ns, event clock) of the last event carrying a gesture phase —
     /// only touch devices emit those. Read/written solely on the tap callback.
     private var lastGesturePhaseTimestamp: UInt64?
+    /// The previous discrete notch, when and which way, so a quick spin can
+    /// travel farther. A reversal or another target starts over.
+    private var lastNotch: (timestamp: UInt64, vertical: Bool, sign: Double)?
     private var tapCreationRetryUsed = false
     private var tapCreationRetryWork: DispatchWorkItem?
 
@@ -388,8 +391,14 @@ final class SmoothScrollService: ObservableObject {
                 horizontal: horizontalTicks,
                 shiftPressed: shiftPressed
             )
-            vertical = axes.vertical * invertVertical
-            horizontal = axes.horizontal * invertHorizontal
+            // Linear scrolling promises a fixed count per notch, so only the
+            // free glide speeds up with the spin.
+            let accelerated = linearLinesPerNotch == nil
+                ? notchAcceleration(axes, at: timestamp,
+                                    setting: defaults.integer(forKey: DefaultsKey.smoothScrollAcceleration))
+                : 1
+            vertical = axes.vertical * invertVertical * accelerated
+            horizontal = axes.horizontal * invertHorizontal * accelerated
             step = Double(SmoothScrollSupport.sanitizedStep(
                 defaults.integer(forKey: DefaultsKey.smoothScrollStep)))
         }
@@ -399,6 +408,7 @@ final class SmoothScrollService: ObservableObject {
 
         let retargeted = targetLatch.update(.init(
             point: event.location, processID: processID, windowNumber: windowNumber))
+        if retargeted { lastNotch = nil }
         targetEvent = template
 
         // Switching Shift while a glide is active changes the intended axis,
@@ -428,6 +438,21 @@ final class SmoothScrollService: ObservableObject {
         startGlideIfNeeded()
         // The tick itself is swallowed; the glide replays its distance.
         return nil
+    }
+
+    /// How far this notch travels against a single click: more the sooner
+    /// it follows the last one the same way. Remembers it for the next.
+    private func notchAcceleration(_ axes: SmoothScrollSupport.Axes, at timestamp: UInt64, setting: Int) -> Double {
+        let vertical = axes.vertical != 0
+        let amount = vertical ? axes.vertical : axes.horizontal
+        guard amount != 0 else { return 1 }
+        let sign: Double = amount < 0 ? -1 : 1
+        let interval = lastNotch.flatMap { last -> TimeInterval? in
+            guard last.vertical == vertical, last.sign == sign, timestamp > last.timestamp else { return nil }
+            return Double(timestamp - last.timestamp) / 1_000_000_000
+        }
+        lastNotch = (timestamp, vertical, sign)
+        return SmoothScrollSupport.accelerationMultiplier(interval: interval, acceleration: setting)
     }
 
     // MARK: - Glide

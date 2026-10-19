@@ -1065,6 +1065,7 @@ extension Strings {
         switcherCurrentDisplayOnlyCaption: "Показує лише вікна дисплея під вказівником. Якщо на ньому немає вікон, перемикач не відкриється.",
         smoothScrollResponseLabel: "Відгук",
         smoothScrollCoastLabel: "Інерція",
+        smoothScrollAccelerationLabel: "Прискорення",
         mouseAccelerationName: "Вимкнути прискорення миші",
         mouseAccelerationCaption: "Вимикає прискорення вказівника для підключених мишей. Попереднє налаштування повернеться після вимкнення функції або виходу з Vorssaint.",
         linearScrollName: "Лінійна прокрутка",

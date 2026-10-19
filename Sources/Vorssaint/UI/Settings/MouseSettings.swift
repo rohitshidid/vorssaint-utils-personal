@@ -34,6 +34,8 @@ struct MouseSettings: View {
         SmoothScrollSupport.defaultResponse
     @AppStorage(DefaultsKey.smoothScrollCoast) private var smoothScrollCoast =
         SmoothScrollSupport.defaultCoast
+    @AppStorage(DefaultsKey.smoothScrollAcceleration) private var smoothScrollAcceleration =
+        SmoothScrollSupport.defaultAcceleration
     @AppStorage(DefaultsKey.mouseNavigationEnabled) private var mouseNavigationEnabled = false
     @AppStorage(DefaultsKey.mouseButtonShortcutsEnabled) private var mouseButtonShortcutsEnabled = false
     @AppStorage(DefaultsKey.mouseSpacesGestureEnabled) private var spacesEnabled = false
@@ -336,6 +338,13 @@ struct MouseSettings: View {
                                   step: 5,
                                   readout: "\(SmoothScrollSupport.sanitizedCoast(smoothScrollCoast))%")
                             .padding(.top, 6)
+                        sliderRow(l10n.s.smoothScrollAccelerationLabel,
+                                  value: smoothScrollAccelerationBinding,
+                                  range: Double(SmoothScrollSupport.accelerationRange.lowerBound)
+                                      ... Double(SmoothScrollSupport.accelerationRange.upperBound),
+                                  step: 5,
+                                  readout: "\(SmoothScrollSupport.sanitizedAcceleration(smoothScrollAcceleration))%")
+                            .padding(.top, 6)
                     } label: {
                         Text(mouseClickDebounceText.moreOptions)
                             .font(.subheadline.weight(.medium))
@@ -572,6 +581,13 @@ struct MouseSettings: View {
         Binding(
             get: { Double(SmoothScrollSupport.sanitizedResponse(smoothScrollResponse)) },
             set: { smoothScrollResponse = Int($0) }
+        )
+    }
+
+    private var smoothScrollAccelerationBinding: Binding<Double> {
+        Binding(
+            get: { Double(SmoothScrollSupport.sanitizedAcceleration(smoothScrollAcceleration)) },
+            set: { smoothScrollAcceleration = Int($0) }
         )
     }
 

@@ -631,6 +631,7 @@ def main():
           + "extension SmoothScrollRoutingTests.Service {\n"
           + smooth_handler
           + declaration(smooth, "    private func stopGlide()").replace("private func", "func", 1)
+          + declaration(smooth, "    private func notchAcceleration(").replace("private func", "func", 1)
           + declaration(smooth, "    private func emitFrame(at timestamp:").replace("private func", "func", 1)
           + declaration(smooth, "    private static func pixelField(").replace("private static", "static", 1)
           + smooth_post.replace("event.postToPid(target.processID)", "SmoothScrollRoutingTests.record(event, to: target.processID)")

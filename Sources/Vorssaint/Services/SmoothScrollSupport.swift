@@ -271,4 +271,33 @@ enum SmoothScrollSupport {
     static func sanitizedCoast(_ value: Int) -> Int {
         min(max(value, coastRange.lowerBound), coastRange.upperBound)
     }
+
+    /// How much farther a notch travels while the wheel spins fast, as the
+    /// system's own wheel does. The glide replays a fixed distance per notch,
+    /// so without it a quick spin down a long page moves no faster than slow
+    /// clicks. Zero keeps every notch the same, as shipped.
+    static let accelerationRange = 0...100
+    static let defaultAcceleration = 0
+    /// Notches further apart than this are single clicks and keep their step.
+    static let accelerationWindow: TimeInterval = 0.12
+    /// The most a notch is multiplied by, however fast the wheel spins.
+    static let maximumAcceleration = 8.0
+    /// How steeply the multiplier grows with the spin at a full setting.
+    private static let accelerationGain = 1.5
+
+    /// The multiplier for a notch that came `interval` after the previous one
+    /// in the same direction; nil for the first notch, or after a reversal.
+    /// It grows with the spin's rate, from one at the window's edge.
+    static func accelerationMultiplier(interval: TimeInterval?, acceleration: Int) -> Double {
+        guard let interval, interval.isFinite, interval > 0, interval < accelerationWindow else { return 1 }
+        let amount = Double(sanitizedAcceleration(acceleration) - accelerationRange.lowerBound)
+            / Double(accelerationRange.upperBound - accelerationRange.lowerBound)
+        // A burst read in the same instant is as fast as the window counts.
+        let rate = accelerationWindow / max(interval, 0.008) - 1
+        return min(maximumAcceleration, 1 + amount * accelerationGain * rate)
+    }
+
+    static func sanitizedAcceleration(_ value: Int) -> Int {
+        min(max(value, accelerationRange.lowerBound), accelerationRange.upperBound)
+    }
 }

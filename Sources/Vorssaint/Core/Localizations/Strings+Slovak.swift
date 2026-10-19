@@ -1095,6 +1095,7 @@ extension Strings {
         switcherCurrentDisplayOnlyCaption: "Vypíše len okná na displeji pod kurzorom. Ak na tom displeji nie sú okná, prepínač sa neotvorí.",
         smoothScrollResponseLabel: "Odozva",
         smoothScrollCoastLabel: "Dobeh",
+        smoothScrollAccelerationLabel: "Zrýchlenie",
         mouseAccelerationName: "Vypnúť akceleráciu myši",
         mouseAccelerationCaption: "Odstráni akceleráciu kurzora pre pripojené myši. Predchádzajúce nastavenie sa vráti po vypnutí tejto funkcie alebo po ukončení Vorssaintu.",
         linearScrollName: "Lineárne rolovanie",

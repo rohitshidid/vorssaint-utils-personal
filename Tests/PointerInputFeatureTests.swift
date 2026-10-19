@@ -910,6 +910,20 @@ enum PointerInputFeatureTests {
         suite.expect(SmoothScrollSupport.sanitizedCoast(-1) == SmoothScrollSupport.coastRange.lowerBound
                 && SmoothScrollSupport.sanitizedCoast(500) == SmoothScrollSupport.coastRange.upperBound,
                "coast clamps damaged preferences to its range")
+        let accel = SmoothScrollSupport.accelerationMultiplier
+        suite.expect(SmoothScrollSupport.defaultAcceleration == 0
+                && accel(0.03, SmoothScrollSupport.defaultAcceleration) == 1,
+               "acceleration ships off so every notch keeps its step")
+        suite.expect(accel(nil, 100) == 1 && accel(0.2, 100) == 1
+                && accel(SmoothScrollSupport.accelerationWindow, 100) == 1,
+               "a first notch, a reversal or a slow click travels one step")
+        suite.expect(accel(0.06, 100) > 1 && accel(0.03, 100) > accel(0.06, 100)
+                && accel(0.03, 50) > 1 && accel(0.03, 50) < accel(0.03, 100),
+               "a faster spin travels farther, and more so at a higher setting")
+        suite.expect(accel(0.001, 100) == SmoothScrollSupport.maximumAcceleration
+                && accel(-1, 100) == 1 && accel(.nan, 100) == 1
+                && SmoothScrollSupport.sanitizedAcceleration(500) == SmoothScrollSupport.accelerationRange.upperBound,
+               "acceleration is capped and ignores damaged timing or preferences")
         suite.expect(SmoothScrollSupport.frameDelta(
             remaining: 100,
             elapsed: SmoothScrollSupport.frameInterval,

@@ -17,7 +17,17 @@ final class ScreenCaptureSelectionOptions: ObservableObject {
     let recorderAudio = RecorderSelectionAudioOptions()
     @Published private(set) var selectedTool: ScreenCaptureTool
     @Published var offersRepeatLastRegion = false
+    /// Whether the next screenshot scrolls, as the selection last set it, so
+    /// the island's controls can show and change it as the bar does.
+    @Published var scrollingCaptureEnabled = false
+    var onChooseScrollingCapture: (() -> Void)?
     var onSelectionChange: (() -> Void)?
+
+    var offersScrollingCapture: Bool { showsCaptureMenu && availableTools.contains(.screenshot) }
+
+    func chooseScrollingCapture() {
+        onChooseScrollingCapture?()
+    }
 
     init(availableTools: [ScreenCaptureTool], selectedTool: ScreenCaptureTool,
          showsCaptureMenu: Bool, controlsInNotch: Bool = false) {

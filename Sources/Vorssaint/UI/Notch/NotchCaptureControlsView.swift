@@ -4,7 +4,7 @@
 import SwiftUI
 
 private enum NotchCaptureControl: Hashable {
-    case collapse, close, tool(ScreenCaptureTool), systemAudio, microphone
+    case collapse, close, tool(ScreenCaptureTool), scrolling, systemAudio, microphone
 }
 
 /// The same selection model drives keyboard shortcuts and the screen overlay.
@@ -25,8 +25,22 @@ struct NotchCaptureControlsView: View {
                 ForEach(options.showsCaptureMenu ? options.availableTools : [options.selectedTool], id: \.self) { tool in
                     NotchActionTile(symbol: tool.systemImageName,
                                     title: tool.settingsTitle(l10n.s, language: l10n.language),
-                                    active: options.selectedTool == tool) { options.select(tool) }
+                                    active: options.selectedTool == tool
+                                        && !(tool == .screenshot && options.scrollingCaptureEnabled)) {
+                        // Screenshot again, while scrolling, is a plain one.
+                        if tool == .screenshot, options.scrollingCaptureEnabled { options.chooseScrollingCapture() }
+                        else { options.select(tool) }
+                    }
                         .focused($focusedControl, equals: .tool(tool))
+                    // A scrolling screenshot sits beside the screenshot it extends.
+                    if tool == .screenshot, options.offersScrollingCapture {
+                        NotchActionTile(symbol: "rectangle.stack",
+                                        title: FeatureStrings.screenshot(l10n.language).scrollingCaptureButton,
+                                        active: options.selectedTool == .screenshot && options.scrollingCaptureEnabled) {
+                            options.chooseScrollingCapture()
+                        }
+                        .focused($focusedControl, equals: .scrolling)
+                    }
                 }
             }
             .padding(.horizontal, 18)

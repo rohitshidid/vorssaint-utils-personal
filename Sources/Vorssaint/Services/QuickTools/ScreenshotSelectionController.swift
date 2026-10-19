@@ -93,6 +93,9 @@ final class ScreenshotSelectionController {
     }
     fileprivate var scrollingCaptureEnabled = false {
         didSet {
+            if screenCaptureOptions?.scrollingCaptureEnabled != scrollingCaptureEnabled {
+                screenCaptureOptions?.scrollingCaptureEnabled = scrollingCaptureEnabled
+            }
             panels.forEach {
                 $0.overlayView.refreshCaptureGuide()
                 $0.overlayView.refreshFullScreenControlVisibility()
@@ -221,6 +224,9 @@ final class ScreenshotSelectionController {
         self.completion = completion
         screenCaptureOptions?.onSelectionChange = { [weak self] in
             self?.screenCaptureToolDidChange()
+        }
+        screenCaptureOptions?.onChooseScrollingCapture = { [weak self] in
+            self?.chooseScrollingCapture()
         }
         if freeze {
             Task { @MainActor [weak self] in
@@ -492,6 +498,17 @@ final class ScreenshotSelectionController {
         guard offersScrollingCapture else { return }
         scrollingCaptureEnabled.toggle()
         panels.forEach { $0.overlayView.refreshPointerState() }
+    }
+
+    /// Whether the capture bar can offer its Scrolling button at all: the
+    /// screenshot tool is one of this session's tools.
+    fileprivate var scrollingCaptureAvailable: Bool { supportsScrollingCapture }
+
+    /// The capture bar's Scrolling button: switches to screenshots when
+    /// another tool is chosen, which turns scrolling off, then toggles it as S does.
+    fileprivate func chooseScrollingCapture() {
+        if activeTool != .screenshot { screenCaptureOptions?.select(.screenshot) }
+        toggleScrollingCapture()
     }
 
     private func toggleLoupe() {
@@ -844,6 +861,7 @@ final class ScreenshotSelectionController {
         Self.isSessionOnScreen = false
         if Self.activeSession === self { Self.activeSession = nil }
         screenCaptureOptions?.onSelectionChange = nil
+        screenCaptureOptions?.onChooseScrollingCapture = nil
         if let keyMonitor {
             NSEvent.removeMonitor(keyMonitor)
             self.keyMonitor = nil
@@ -1078,7 +1096,9 @@ private final class ScreenshotOverlayView: NSView {
             requiresDraggedRegion: controller.requiresDraggedRegion,
             scrollingCaptureEnabled: controller.scrollingCaptureEnabled,
             loupeEnabled: controller.loupeEnabled,
-            screenCaptureOptions: screenCaptureOptions))
+            screenCaptureOptions: screenCaptureOptions,
+            scrollingCaptureAvailable: controller.scrollingCaptureAvailable,
+            chooseScrollingCapture: { [weak controller] in controller?.chooseScrollingCapture() }))
         host.passesThrough = screenCaptureOptions == nil
         guideHost = host
         let hoverRelay = FullScreenControlHoverRelay()
@@ -1186,7 +1206,9 @@ private final class ScreenshotOverlayView: NSView {
             requiresDraggedRegion: controller?.requiresDraggedRegion ?? false,
             scrollingCaptureEnabled: controller?.scrollingCaptureEnabled ?? false,
             loupeEnabled: controller?.loupeEnabled ?? false,
-            screenCaptureOptions: screenCaptureOptions)
+            screenCaptureOptions: screenCaptureOptions,
+            scrollingCaptureAvailable: controller?.scrollingCaptureAvailable ?? false,
+            chooseScrollingCapture: { [weak controller] in controller?.chooseScrollingCapture() })
     }
 
     func captureToolDidChange() {
@@ -1853,6 +1875,8 @@ private struct CaptureGuideView: View {
     let scrollingCaptureEnabled: Bool
     let loupeEnabled: Bool
     let screenCaptureOptions: ScreenCaptureSelectionOptions?
+    var scrollingCaptureAvailable = false
+    var chooseScrollingCapture: () -> Void = {}
 
     var body: some View {
         if let screenCaptureOptions {
@@ -1861,7 +1885,9 @@ private struct CaptureGuideView: View {
                                        offersScrollingCapture: offersScrollingCapture,
                                        offersRepeatLastRegion: offersRepeatLastRegion,
                                        scrollingCaptureEnabled: scrollingCaptureEnabled,
-                                       loupeEnabled: loupeEnabled)
+                                       loupeEnabled: loupeEnabled,
+                                       scrollingCaptureAvailable: scrollingCaptureAvailable,
+                                       chooseScrollingCapture: chooseScrollingCapture)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .allowsHitTesting(true)
         } else {
@@ -1947,7 +1973,10 @@ private struct UnifiedCaptureGuideContent: View {
     let offersRepeatLastRegion: Bool
     let scrollingCaptureEnabled: Bool
     let loupeEnabled: Bool
+    let scrollingCaptureAvailable: Bool
+    let chooseScrollingCapture: () -> Void
     @State private var hoveredTool: ScreenCaptureTool?
+    @State private var scrollingHovered = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -2029,6 +2058,10 @@ private struct UnifiedCaptureGuideContent: View {
         HStack(spacing: 2) {
             ForEach(options.availableTools, id: \.self) { tool in
                 captureModeButton(tool)
+                // A scrolling screenshot sits beside the screenshot it extends.
+                if tool == .screenshot, scrollingCaptureAvailable {
+                    scrollingCaptureButton
+                }
             }
         }
         .padding(4)
@@ -2042,11 +2075,58 @@ private struct UnifiedCaptureGuideContent: View {
         .shadow(color: .black.opacity(0.18), radius: 12, y: 5)
     }
 
+    /// Does what S does, for whoever reaches for the bar instead: on, the
+    /// next dragged area scrolls and stitches into one tall screenshot.
+    private var scrollingCaptureButton: some View {
+        let selected = options.selectedTool == .screenshot && scrollingCaptureEnabled
+        let title = strings.scrollingCaptureButton
+        return Button(action: chooseScrollingCapture) {
+            VStack(spacing: 3) {
+                HStack(spacing: 6) {
+                    Text("S")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundStyle(selected ? Color.white : Color.primary)
+                        .frame(width: 19, height: 19)
+                        .background(selected ? Color.accentColor : Color.primary.opacity(0.11),
+                                    in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                    Image(systemName: "rectangle.stack")
+                        .font(.system(size: 13, weight: .semibold))
+                        .symbolRenderingMode(.hierarchical)
+                }
+                Text(title)
+                    .font(.system(size: 10, weight: selected ? .semibold : .medium))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .foregroundStyle(selected ? Color.primary : Color.primary.opacity(0.78))
+            .frame(width: 116, height: 48)
+            .background(selected ? Color.accentColor.opacity(0.16)
+                        : Color.primary.opacity(scrollingHovered ? 0.08 : 0.035),
+                        in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(Color.accentColor.opacity(selected ? 0.48 : 0), lineWidth: 1)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.12)) { scrollingHovered = hovering }
+        }
+        .help("\(title) (S)")
+        .accessibilityLabel(title)
+        .accessibilityValue("S")
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
     private func captureModeButton(_ tool: ScreenCaptureTool) -> some View {
-        let selected = options.selectedTool == tool
+        let scrolling = tool == .screenshot && scrollingCaptureEnabled
+        let selected = options.selectedTool == tool && !scrolling
         let hovered = hoveredTool == tool
         let title = tool.settingsTitle(l10n.s, language: l10n.language)
         return Button {
+            // Screenshot again, while scrolling, is a plain one.
+            if scrolling { chooseScrollingCapture(); return }
             // Animating this publishes the new tool through the hosting view
             // that fills the display. That view then asks the window to adopt
             // the bar's size, and the window server scales the request.

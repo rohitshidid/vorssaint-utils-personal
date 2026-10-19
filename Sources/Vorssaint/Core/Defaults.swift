@@ -228,6 +228,10 @@ enum DefaultsKey {
     // Set once the paths cached before paired discovery requests have been
     // dropped, so a monitor written off then is classified again exactly once.
     static let brightnessDDCWriteOnlyPathsRechecked = "brightnessDDCWriteOnlyPathsRechecked"
+    // The speaker level last sent to each monitor's audio output, by output
+    // UID, and the outputs muted here: the monitor itself is never asked.
+    static let monitorSpeakerLevels = "monitorSpeakerLevels"
+    static let monitorSpeakerMuted = "monitorSpeakerMuted"
     /// A beta already installed the companion for this Command Bar user, once.
     static let notchMascotBetaInstalled = "notchMascotBetaInstalled"
     // Per-monitor connection paths a person has told this app to dim in

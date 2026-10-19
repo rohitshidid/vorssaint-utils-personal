@@ -185,6 +185,9 @@ final class BrightnessService: ObservableObject {
         let smooth: Bool
     }
     private var pendingLevels: [CGDirectDisplayID: PendingWrite] = [:]
+    /// Monitor speaker levels waiting for the work queue, newest per display.
+    private var pendingSpeakerValues: [CGDirectDisplayID: UInt16] = [:]
+    private var speakerDrainScheduled = false
     private var writeSequence: UInt64 = 0
     /// Keeps fast system-key repeats based on the newest requested value while
     /// DisplayServices is still applying the previous asynchronous write.
@@ -577,6 +580,7 @@ final class BrightnessService: ObservableObject {
         rebuildingTopology = nil
         routes = [:]
         pendingLevels = [:]
+        pendingSpeakerValues = [:]
         writeSequence = 0
         systemWritesInFlight = []
         lastApplied = [:]
@@ -584,6 +588,7 @@ final class BrightnessService: ObservableObject {
         knownActiveTopology = []
         knownMirrorSources = [:]
         stateLock.unlock()
+        MonitorSpeakerVolume.updateMonitors([])
         ddcPendingSteps = [:]
         pendingDisplayIDs = []
         displayControlFailure = nil
@@ -685,6 +690,46 @@ final class BrightnessService: ObservableObject {
         guard schedule else { return }
         workQueue.async { [weak self] in
             self?.drainPendingLevels()
+        }
+    }
+
+    // MARK: - Monitor speakers
+
+    /// Sets a monitor's speaker volume (VCP 0x62) on the same queue and with
+    /// the same spacing as its brightness, since DDC displays drop commands
+    /// that interleave. A burst folds into one write of the newest value.
+    /// False when the display has no DDC route.
+    func setSpeakerVolume(_ value: UInt16, for id: CGDirectDisplayID) -> Bool {
+        stateLock.lock()
+        guard routes[id]?.method == .ddc, routes[id]?.service != nil else {
+            stateLock.unlock()
+            return false
+        }
+        pendingSpeakerValues[id] = value
+        let schedule = !speakerDrainScheduled
+        if schedule { speakerDrainScheduled = true }
+        stateLock.unlock()
+        if schedule {
+            workQueue.async { [weak self] in self?.drainSpeakerValues() }
+        }
+        return true
+    }
+
+    private func drainSpeakerValues() {
+        while true {
+            stateLock.lock()
+            guard let (id, value) = pendingSpeakerValues.first else {
+                speakerDrainScheduled = false
+                stateLock.unlock()
+                return
+            }
+            pendingSpeakerValues.removeValue(forKey: id)
+            let service = routes[id]?.method == .ddc ? routes[id]?.service : nil
+            stateLock.unlock()
+            guard let service else { continue }
+            let packet = BrightnessSupport.writePacket(code: MonitorSpeakerSupport.volumeCode, value: value)
+            let sent = ddcSend(to: id, service: service, packet: packet)
+            Self.log.log("wrote display \(id) speaker volume \(value) ok \(sent)")
         }
     }
 
@@ -2273,8 +2318,12 @@ final class BrightnessService: ObservableObject {
                     fingerprint: Self.displayFingerprint(display.id))
             }
         }
+        let speakerDisplays = stale ? [] : routes.compactMap { id, route in
+            route.method == .ddc && route.service != nil ? id : nil
+        }
         stateLock.unlock()
         guard !stale else { return }
+        MonitorSpeakerVolume.updateMonitors(speakerDisplays)
         for display in resolved where display.isActive {
             let route = display.method.map { String(describing: $0) } ?? "none"
             Self.log.log("display \(display.id) [\(Self.displayFingerprint(display.id), privacy: .public)] route \(route, privacy: .public) level \(display.brightness)")

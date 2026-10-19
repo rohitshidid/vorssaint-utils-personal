@@ -199,7 +199,15 @@ final class AppVolumeMixer: ObservableObject {
     private var outputControlLifetime = UUID()
     private let halQueue = DispatchQueue(label: "com.vorssaint.utils.mixer.hal", qos: .userInitiated)
 
-    private init() {}
+    private init() {
+        // A monitor's speakers gain or lose their level as its DDC route
+        // comes and goes, without any audio property changing.
+        NotificationCenter.default.addObserver(forName: MonitorSpeakerVolume.availabilityChanged,
+                                               object: nil, queue: .main) { [weak self] _ in
+            guard let self, self.listenerInstalled else { return }
+            self.scheduleListenerRefresh()
+        }
+    }
 
     // MARK: - Lifecycle
 
@@ -392,7 +400,9 @@ final class AppVolumeMixer: ObservableObject {
                 outputControlListenerAddresses.append(address)
             }
         }
-        if !outputControlListenerAddresses.isEmpty {
+        // A monitor's own speakers have no control to watch, yet take their
+        // level over DDC, so keys and sliders still have an output to adjust.
+        if !outputControlListenerAddresses.isEmpty || MonitorSpeakerVolume.controls(device) {
             outputControlListenerDevice = device
         }
     }
@@ -2022,7 +2032,7 @@ final class AppVolumeMixer: ObservableObject {
                 return volume
             }
         }
-        return nil
+        return MonitorSpeakerVolume.level(for: deviceID).map(Float32.init)
     }
 
     private static func hasSettableOutputVolume(for deviceID: AudioObjectID) -> Bool {
@@ -2037,7 +2047,8 @@ final class AppVolumeMixer: ObservableObject {
                 return true
             }
         }
-        return false
+        // A display's audio has no level of its own; its monitor takes it over DDC.
+        return MonitorSpeakerVolume.controls(deviceID)
     }
 
     private static func outputDevices(defaultUID: String?) -> [MixerOutputDevice] {
@@ -2243,7 +2254,7 @@ final class AppVolumeMixer: ObservableObject {
                 return true
             }
         }
-        return false
+        return MonitorSpeakerVolume.setLevel(Double(clamped), for: deviceID)
     }
 
     /// System volume as people mean it: the default output device's main
@@ -2302,7 +2313,7 @@ final class AppVolumeMixer: ObservableObject {
             else { continue }
             return value != 0
         }
-        return nil
+        return MonitorSpeakerVolume.isMuted(for: deviceID)
     }
 
     @discardableResult
@@ -2322,7 +2333,7 @@ final class AppVolumeMixer: ObservableObject {
                 changed = true
             }
         }
-        return changed
+        return changed || MonitorSpeakerVolume.setMuted(muted, for: deviceID)
     }
 
     /// A property holding a list of objects, empty when it cannot be read.

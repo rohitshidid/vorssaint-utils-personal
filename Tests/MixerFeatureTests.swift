@@ -13,6 +13,7 @@ import VMStatisticsCompat
 
 enum MixerFeatureTests {
     static func run(_ suite: TestSuite) {
+        MonitorSpeakerTests.run(suite)
         let switcherOnly = MixerRoutingSupport.observationNeeds {
             $0 == .soundOutputSwitcher
         }

@@ -5,14 +5,37 @@ import Darwin
 import Foundation
 import UniformTypeIdentifiers
 
+/// Where files dragged over the island can go.
+enum NotchFileDropChoice: Equatable {
+    case shelf, link, media
+}
+
 enum NotchFileToolsSupport {
     static let dropSpacing: CGFloat = 12
 
     static func mediaDropArea(in geometry: NotchGeometry, size: CGSize) -> CGRect {
+        dropArea(1, of: 2, in: geometry, size: size)
+    }
+
+    /// The destinations side by side, the shelf first while it is on.
+    static func dropChoices(shelf: Bool, link: Bool, media: Bool) -> [NotchFileDropChoice] {
+        (shelf ? [.shelf] : []) + (link ? [.link] : []) + (media ? [.media] : [])
+    }
+
+    /// The column under the pointer; anywhere else is the first column.
+    static func dropChoice(at point: CGPoint, among choices: [NotchFileDropChoice],
+                           in geometry: NotchGeometry, size: CGSize) -> NotchFileDropChoice {
+        choices.indices.first { dropArea($0, of: choices.count, in: geometry, size: size).contains(point) }
+            .map { choices[$0] } ?? choices.first ?? .shelf
+    }
+
+    /// One of `count` equal columns across the page, as the chooser lays them out.
+    static func dropArea(_ index: Int, of count: Int, in geometry: NotchGeometry, size: CGSize) -> CGRect {
         let content = geometry.contentSize(for: size)
-        return CGRect(x: size.width / 2 + dropSpacing / 2,
-                      y: geometry.pageTopInset,
-                      width: max(0, (content.width - dropSpacing) / 2), height: content.height)
+        let count = max(1, count)
+        let width = max(0, (content.width - dropSpacing * CGFloat(count - 1)) / CGFloat(count))
+        return CGRect(x: (size.width - content.width) / 2 + CGFloat(index) * (width + dropSpacing),
+                      y: geometry.pageTopInset, width: width, height: content.height)
     }
 
     static func optimizationTool(for urls: [URL]) -> MediaTool? {

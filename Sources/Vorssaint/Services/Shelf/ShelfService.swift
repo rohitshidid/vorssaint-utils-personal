@@ -337,7 +337,7 @@ final class ShelfService: ObservableObject {
             shortcutSelectionRequests.invalidate()
             cancelPendingPromiseDeliveries()
             unregisterHotkey()
-            stopDragMonitor()
+            syncDragMonitor()
             hide()
             hideDocked()
         }
@@ -369,14 +369,17 @@ final class ShelfService: ObservableObject {
 
     /// Re-reads the sub-preferences that need the global drag monitor (shake to
     /// open and the docked shelf); the monitor lives only while the shelf is on
-    /// and at least one of them wants it.
+    /// and at least one of them wants it. The island follows drags with it too,
+    /// and still takes files to share or optimize while the shelf is off.
     func syncDragMonitor() {
         let defaults = UserDefaults.standard
+        let islandFollows = NotchSupport.revealsShelfDrag() || NotchSupport.dragProximity() > 0
         let wanted = defaults.bool(forKey: DefaultsKey.shelfEnabled)
-            && (defaults.bool(forKey: DefaultsKey.shelfShakeToOpen)
+            ? defaults.bool(forKey: DefaultsKey.shelfShakeToOpen)
                 || defaults.bool(forKey: DefaultsKey.shelfDropZoneEnabled)
                 || defaults.bool(forKey: DefaultsKey.shelfEdgeDragEnabled)
-                || NotchSupport.revealsShelfDrag())
+                || islandFollows
+            : islandFollows && (NotchLinkService.shared.offersDrop || NotchFileToolsService.shared.offersMediaDrop)
         if wanted { startDragMonitor() } else { stopDragMonitor() }
         syncDockedShelf()
     }
@@ -474,6 +477,8 @@ final class ShelfService: ObservableObject {
                     return
                 }
                 let defaults = UserDefaults.standard
+                // Watching for the island alone, the shelf's own triggers stay off.
+                guard defaults.bool(forKey: DefaultsKey.shelfEnabled) else { self.startDockedWatchdog(); return }
                 if defaults.bool(forKey: DefaultsKey.shelfShakeToOpen) {
                     self.handleDrag(event)
                 }

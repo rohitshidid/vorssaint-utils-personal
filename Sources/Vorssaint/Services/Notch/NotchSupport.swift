@@ -7,7 +7,7 @@ import Foundation
 import CoreGraphics
 
 enum NotchModule: String, CaseIterable, Identifiable {
-    case controls, mixer, music, clipboard, captures, files, system, tools, calendar, notifications, timer, camera, downloads, scratchpad, agents, watch
+    case controls, mixer, music, clipboard, captures, files, system, tools, calendar, notifications, timer, camera, downloads, scratchpad, agents, watch, workloads, links
     var id: String { rawValue }
 
     var symbol: String {
@@ -31,6 +31,8 @@ enum NotchModule: String, CaseIterable, Identifiable {
         case .scratchpad: return "note.text"
         case .agents: return "sparkles"
         case .watch: return "eye"
+        case .workloads: return "shippingbox"
+        case .links: return NotchLinkSupport.symbol
         }
     }
 
@@ -53,6 +55,8 @@ enum NotchModule: String, CaseIterable, Identifiable {
         case .scratchpad: return "p"
         case .agents: return "g"
         case .watch: return "o"
+        case .workloads: return "k"
+        case .links: return "l"
         }
     }
 
@@ -76,6 +80,8 @@ enum NotchModule: String, CaseIterable, Identifiable {
         case .scratchpad: return AppFeature.scratchpad.isAvailable(in: defaults)
         case .agents: return AppFeature.notchAgents.isAvailable(in: defaults)
         case .watch: return AppFeature.notchWatch.isAvailable(in: defaults)
+        case .workloads: return AppFeature.notchWorkloads.isAvailable(in: defaults)
+        case .links: return AppFeature.notchLinks.isAvailable(in: defaults)
         case .system:
             return [.monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork,
                     .monitorDisk, .monitorPower, .fanControl, .connectedDevices].contains { (feature: AppFeature) in
@@ -823,7 +829,7 @@ enum NotchMusicStripLayout {
 }
 
 enum NotchCompactActivity: String, Identifiable {
-    case timer, watch, downloads, agents, calendar, music, keepAwake
+    case timer, watch, downloads, links, agents, calendar, music, keepAwake
 
     var id: String { rawValue }
 
@@ -836,6 +842,7 @@ enum NotchCompactActivity: String, Identifiable {
         case .calendar: return FeatureStrings.notchCalendar(language).title
         case .music: return FeatureStrings.notch(language).music
         case .keepAwake: return Strings.localized(language).keepAwakeTitle
+        case .links: return FeatureStrings.notchLinks(language).title
         }
     }
 
@@ -849,6 +856,7 @@ enum NotchCompactActivity: String, Identifiable {
         case .calendar: return .calendar
         case .music: return .music
         case .keepAwake: return .controls
+        case .links: return .links
         }
     }
 
@@ -1156,6 +1164,15 @@ enum NotchCapsuleLayout {
         let right = reading.map { width(NotchAgentSupport.readingShape($0), font: readingFont) }
             ?? NotchKeepAwakeSupport.symbolWidth(NotchKeepAwakeSupport.openSymbol, size: readingFont.pointSize) + air
         return surface(content: cup + spacing + right, maximum: Maximum.activity, geometry: geometry)
+    }
+
+    /// Shared links: the link's mark, then a download's progress or the
+    /// time the next link has left, or infinity when none of them ends.
+    static func linkSurface(reading: String?, geometry: NotchGeometry) -> CGSize {
+        let mark = NotchKeepAwakeSupport.symbolWidth(NotchLinkSupport.symbol, size: symbolSize)
+        let right = reading.map { width(NotchAgentSupport.readingShape($0), font: readingFont) }
+            ?? NotchKeepAwakeSupport.symbolWidth(NotchLinkSupport.openSymbol, size: readingFont.pointSize) + air
+        return surface(content: mark + spacing + right, maximum: Maximum.activity, geometry: geometry)
     }
 
     /// Working agents' marks and the reading the person chose.
@@ -1594,12 +1611,13 @@ enum NotchQuickAccessLayout {
 }
 
 enum NotchEvent: String, CaseIterable {
-    case volume, brightness, battery, clipboard, capture, systemNotification, keyboardLight, timer, accessory, download, agents, track, microphone, watch, inputSource, dictation
+    case volume, brightness, battery, clipboard, capture, systemNotification, keyboardLight, timer, accessory, download, agents, track, microphone, watch, inputSource, dictation, shareLink
 
     var preferenceKey: String {
         switch self {
         case .microphone: return DefaultsKey.notchMicrophone
         case .dictation: return DefaultsKey.notchDictation
+        case .shareLink: return DefaultsKey.notchLinkAlerts
         case .track: return DefaultsKey.notchTrackChange
         case .timer: return DefaultsKey.notchTimerEnabled
         case .watch: return DefaultsKey.notchWatchEnabled
@@ -1621,7 +1639,7 @@ enum NotchEvent: String, CaseIterable {
         switch self {
         case .volume, .brightness, .keyboardLight, .microphone, .inputSource, .dictation: return 3
         case .capture, .timer, .watch: return 2
-        case .battery, .systemNotification, .accessory, .agents: return 1
+        case .battery, .systemNotification, .accessory, .agents, .shareLink: return 1
         case .clipboard, .download, .track: return 0
         }
     }
@@ -1635,7 +1653,7 @@ enum NotchEvent: String, CaseIterable {
         case .systemNotification, .track: return 3
         case .timer, .download, .watch: return 6
         case .agents: return 5
-        case .battery, .accessory: return 4
+        case .battery, .accessory, .shareLink: return 4
         case .clipboard: return 2.5
         case .capture: return 12
         }
@@ -1667,6 +1685,26 @@ enum NotchSupport {
 
     static func sanitizedHoverDelay(_ value: TimeInterval) -> TimeInterval {
         value.isFinite ? min(hoverDelayRange.upperBound, max(hoverDelayRange.lowerBound, value)) : defaultHoverDelay
+    }
+
+    static let defaultDragProximity = 80.0
+    static let dragProximityRange = 0.0...200.0
+
+    static func sanitizedDragProximity(_ value: Double) -> Double {
+        value.isFinite ? min(dragProximityRange.upperBound, max(dragProximityRange.lowerBound, value)) : defaultDragProximity
+    }
+
+    /// How near a dragged file comes before the island opens to take it, so
+    /// it can be dropped clear of the top edge, where macOS opens Mission
+    /// Control. None waits until the file is over the island.
+    static func dragProximity(in defaults: UserDefaults = .standard) -> CGFloat {
+        guard routesShelf(in: defaults) else { return 0 }
+        return CGFloat(sanitizedDragProximity(defaults.double(forKey: DefaultsKey.notchDragProximity)))
+    }
+
+    /// How far a point lies outside a frame; inside it, none.
+    static func distance(from point: CGPoint, to frame: CGRect) -> CGFloat {
+        hypot(max(frame.minX - point.x, 0, point.x - frame.maxX), max(frame.minY - point.y, 0, point.y - frame.maxY))
     }
 
     /// How long an island opened by hover waits after the pointer leaves.
@@ -1778,19 +1816,20 @@ enum NotchSupport {
     }
 
     /// Automatic order until the user chooses one of the live activities.
-    static func compactActivity(timer: Bool, downloads: Bool, agents: Bool = false,
+    static func compactActivity(timer: Bool, downloads: Bool, links: Bool = false, agents: Bool = false,
                                 calendar: Bool = false, music: Bool, keepAwake: Bool = false) -> NotchCompactActivity? {
-        compactActivities(timer: timer, downloads: downloads, agents: agents,
+        compactActivities(timer: timer, downloads: downloads, links: links, agents: agents,
                           calendar: calendar, music: music, keepAwake: keepAwake).first
     }
 
     /// Keep Awake comes last: a session can run all day, even more than
     /// music plays, and it only says that the Mac stays awake. A watch
     /// follows the timer: the person started both and is waiting on them.
-    static func compactActivities(timer: Bool, watch: Bool = false, downloads: Bool, agents: Bool,
+    /// Shared links follow downloads: files on their way, the other way.
+    static func compactActivities(timer: Bool, watch: Bool = false, downloads: Bool, links: Bool = false, agents: Bool,
                                   calendar: Bool, music: Bool, keepAwake: Bool = false) -> [NotchCompactActivity] {
         let candidates: [(Bool, NotchCompactActivity)] = [
-            (timer, .timer), (watch, .watch), (downloads, .downloads), (agents, .agents),
+            (timer, .timer), (watch, .watch), (downloads, .downloads), (links, .links), (agents, .agents),
             (calendar, .calendar), (music, .music), (keepAwake, .keepAwake)
         ]
         return candidates.compactMap { $0.0 ? $0.1 : nil }
@@ -2034,6 +2073,8 @@ enum NotchSupport {
         case .inputSource: return true
         // Murmur, another app, records; the island only shows it.
         case .dictation: return true
+        case .shareLink: return AppFeature.notchLinks.isAvailable(in: defaults)
+            && modules(in: defaults).contains(.links)
         }
     }
 
@@ -2745,7 +2786,8 @@ struct NotchGeometry: Equatable {
                 // Only the cards a person chose; a short set leaves a short island.
                 contentHeight = min(budget, agentsHeight.map { $0 > 0 ? $0 : NotchLayout.emptyHeight } ?? budget)
             // Lists and previews fill the chosen content budget.
-            case .mixer, .calendar, .clipboard, .captures, .files, .notifications, .downloads, .camera, .scratchpad, .watch:
+            case .mixer, .calendar, .clipboard, .captures, .files, .notifications, .downloads, .camera, .scratchpad, .watch,
+                 .workloads, .links:
                 contentHeight = budget
             }
         }

@@ -272,6 +272,11 @@ if (( TEST )); then
         Sources/Vorssaint/Core/NotchFilesStrings.swift
         Sources/Vorssaint/Core/NotchWatchStrings.swift
         Sources/Vorssaint/Services/Notch/NotchWatchSupport.swift
+        Sources/Vorssaint/Core/NotchWorkloadStrings.swift
+        Sources/Vorssaint/Services/Notch/NotchWorkloadSupport.swift
+        Sources/Vorssaint/Core/NotchLinkStrings.swift
+        Sources/Vorssaint/Services/Notch/NotchLinkSupport.swift
+        Sources/Vorssaint/Services/Notch/NotchLinkServer.swift
         Sources/Vorssaint/Core/NotchMascotStrings.swift
         Sources/Vorssaint/Services/Notch/NotchMascotSupport.swift
         Sources/Vorssaint/Services/CommandBar/CommandBarDropletMotion.swift

@@ -123,6 +123,12 @@ final class NotchService: ObservableObject {
     @Published private(set) var dragPlaceholder = false
     @Published private(set) var choosingFileDropDestination = false
     @Published private(set) var targetsMediaDrop = false
+    /// The destinations a drag over the island is offered beside the shelf.
+    @Published private(set) var offersMediaDrop = false
+    @Published private(set) var offersLinkDrop = false
+    /// Off while the shelf itself is switched off; links and optimization still take files.
+    @Published private(set) var offersShelfDrop = false
+    @Published private(set) var targetsLinkDrop = false
     @Published private(set) var selectedMetric: MetricDetailKind?
     @Published private(set) var captureControls: ScreenCaptureSelectionOptions?
     @Published private(set) var captureControlsCollapsed = false
@@ -179,6 +185,8 @@ final class NotchService: ObservableObject {
     private var captureControlsSubscription: AnyCancellable?
     private var captureControlsWork: DispatchWorkItem?
     private var heldDrag = false
+    /// A dragged file came near enough to open the drop choices before reaching the island.
+    private var dragApproached = false
     private var observers: [(NotificationCenter, NSObjectProtocol)] = []
     private var subscriptions = Set<AnyCancellable>()
     private var eventMonitors: [Any] = []
@@ -507,6 +515,10 @@ final class NotchService: ObservableObject {
         NotchKeepAwakeSupport.showsActivity() && KeepAwakeManager.shared.isActive
     }
 
+    var hasLinkActivity: Bool {
+        NotchLinkSupport.showsActivity() && NotchLinkService.shared.isActive
+    }
+
     var compactActivity: NotchCompactActivity? {
         // A new song waiting for its notice is not drawn yet.
         activitySelection.current(available: awaitsTrackNotice ? compactActivities.filter { $0 != .music } : compactActivities)
@@ -514,7 +526,7 @@ final class NotchService: ObservableObject {
 
     var compactActivities: [NotchCompactActivity] {
         NotchSupport.compactActivities(timer: hasTimerActivity, watch: hasWatchActivity, downloads: hasDownloadActivity,
-                                      agents: hasAgentActivity, calendar: hasCalendarActivity,
+                                      links: hasLinkActivity, agents: hasAgentActivity, calendar: hasCalendarActivity,
                                       music: hasMusicActivity, keepAwake: hasKeepAwakeActivity)
     }
 
@@ -641,6 +653,7 @@ final class NotchService: ObservableObject {
                                                     paired: companion != nil)
         // Its reading is a countdown like the timer's, so it takes the timer's wings.
         case .keepAwake: return geometry.compactTimerGeometry(showsDownloads: false, wing: keepAwakeStripWing(in: geometry))
+        case .links: return geometry.compactTimerGeometry(showsDownloads: false, wing: linkStripWing(in: geometry))
         default: return geometry
         }
     }
@@ -662,6 +675,16 @@ final class NotchService: ObservableObject {
     private func keepAwakeStripWing(in geometry: NotchGeometry) -> CGFloat {
         NotchKeepAwakeSupport.stripWing(until: KeepAwakeManager.shared.endDate, now: Date(),
                                         locale: Locale(identifier: L10n.shared.language.rawValue), in: geometry)
+    }
+
+    private var linkReading: String? {
+        let links = NotchLinkService.shared
+        return NotchLinkSupport.compactReading(progress: links.progress, nextEnd: links.nextEnd, now: Date(),
+                                               locale: Locale(identifier: L10n.shared.language.rawValue))
+    }
+
+    private func linkStripWing(in geometry: NotchGeometry) -> CGFloat {
+        NotchLinkSupport.stripWing(reading: linkReading, in: geometry)
     }
 
     /// The wider of the two sides, measured with the strip's fonts and its
@@ -1055,6 +1078,8 @@ final class NotchService: ObservableObject {
                 NotchKeepAwakeSupport.compactText(until: $0, now: Date(), locale: Locale(identifier: language.rawValue))
             }
             return layout.keepAwakeSurface(reading: reading, geometry: geometry)
+        case .links:
+            return layout.linkSurface(reading: linkReading, geometry: geometry)
         }
     }
 
@@ -1145,12 +1170,15 @@ final class NotchService: ObservableObject {
         syncGestures()
         NotchTimerService.shared.syncWithPreferences()
         NotchAccessoryService.shared.syncWithPreferences()
+        NotchLinkService.shared.syncWithPreferences()
         let signature = NotchEvent.allCases.map { String(NotchSupport.routes($0)) }.joined()
             + NotchSupport.idleContent().rawValue + String(NotchSupport.watchesMusicActivity())
-            + String(NotchKeepAwakeSupport.showsActivity())
+            + String(NotchKeepAwakeSupport.showsActivity()) + String(NotchLinkSupport.showsActivity())
             + modules.map(\.rawValue).joined()
             + String(AppFeature.fanControl.isAvailable)
             + String(NotchSupport.routesShelf()) + String(NotchSupport.revealsShelfDrag())
+            + String(NotchSupport.dragProximity() > 0) + String(NotchLinkService.shared.offersDrop)
+            + String(NotchFileToolsService.shared.offersMediaDrop)
             + String(NotchSupport.routesCaptureControls())
             + String(NotchMascotSupport.isEnabled())
         if signature != settingsSignature {
@@ -2026,10 +2054,12 @@ final class NotchService: ObservableObject {
 
     func fileDragChanged(_ active: Bool, internalDrag: Bool = false) {
         guard running, !suspended, internalDrag || NotchSupport.routesShelf() else { return }
+        if active, !internalDrag, followDragApproach() { return }
         heldDrag = active && internalDrag
         if active, !internalDrag, NotchSupport.revealsShelfDrag(), !expanded {
             mutatePresentation { dragPlaceholder = true; peeking = false }
         } else if !active {
+            endDragApproach()
             mutatePresentation { dragPlaceholder = false }
             inside = windowHost?.containsHover(NSEvent.mouseLocation) == true
             if !inside, !pinned { hover(false) }
@@ -2038,6 +2068,53 @@ final class NotchService: ObservableObject {
         if active, dragPlaceholder, NotchMascotSupport.isEnabled() {
             NotificationCenter.default.post(name: .notchMascotDragMoved, object: nil)
         }
+    }
+
+    /// Opens the drop choices as a dragged file comes near, so it can be
+    /// dropped low in the island instead of at the top edge, where macOS
+    /// opens Mission Control. They close again if the file moves away.
+    /// True while the choices are held open for it.
+    private func followDragApproach() -> Bool {
+        let proximity = NotchSupport.dragProximity()
+        let distance = NotchSupport.distance(from: NSEvent.mouseLocation, to: geometry.frame(for: surfaceSize))
+        if dragApproached {
+            if expanded, distance <= proximity { return true }
+            dragApproached = false
+            heldDrag = false
+            endFileDrop()
+            collapse()
+            return false
+        }
+        guard proximity > 0, distance <= proximity, !expanded, canAcceptFileDrop,
+              !ShelfService.shared.isInternalDragActive else { return false }
+        let pasteboard = NSPasteboard(name: .drag)
+        guard takesFileDrop(pasteboard) else { return false }
+        dragApproached = true
+        heldDrag = true
+        dragPlaceholder = false
+        beginFileDrop(pasteboard)
+        return true
+    }
+
+    /// A drop on the island lands after the button comes up and opens its
+    /// own page; a file let go anywhere else leaves the choices to close.
+    private func endDragApproach() {
+        guard dragApproached else { return }
+        dragApproached = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            guard let self, !self.dragApproached, self.choosingFileDropDestination || self.expanded,
+                  !self.pinned, self.windowHost?.containsHover(NSEvent.mouseLocation) != true else { return }
+            self.endFileDrop()
+            self.collapse()
+        }
+    }
+
+    /// Whether the island has somewhere to put what is dragged: the shelf,
+    /// a link, or optimization.
+    func takesFileDrop(_ pasteboard: NSPasteboard) -> Bool {
+        ShelfService.shared.canAcceptPasteboard(pasteboard)
+            || NotchLinkService.shared.linkDropContent(for: pasteboard) != nil
+            || NotchFileToolsService.shared.mediaDropContent(for: pasteboard) != nil
     }
 
     func presentCaptureControls(_ options: ScreenCaptureSelectionOptions, cancel: @escaping () -> Void) {
@@ -2258,28 +2335,45 @@ final class NotchService: ObservableObject {
     var canAcceptFileDrop: Bool {
         acceptsUserInteraction && captureControls == nil && modules.contains(.files)
             && AppFeature.shelf.isAvailable
-            && UserDefaults.standard.bool(forKey: DefaultsKey.shelfEnabled)
+            && (UserDefaults.standard.bool(forKey: DefaultsKey.shelfEnabled)
+                || NotchLinkService.shared.offersDrop || NotchFileToolsService.shared.offersMediaDrop)
     }
 
     func beginFileDrop(_ pasteboard: NSPasteboard) {
         guard canAcceptFileDrop else { return }
-        choosingFileDropDestination = NotchFileToolsService.shared.mediaDropContent(for: pasteboard) != nil
+        offersShelfDrop = UserDefaults.standard.bool(forKey: DefaultsKey.shelfEnabled)
+        offersMediaDrop = NotchFileToolsService.shared.mediaDropContent(for: pasteboard) != nil
+        offersLinkDrop = NotchLinkService.shared.linkDropContent(for: pasteboard) != nil
+        choosingFileDropDestination = offersMediaDrop || offersLinkDrop
         targetsMediaDrop = false
+        targetsLinkDrop = false
         open(.files, takeFocus: false)
     }
 
     @discardableResult
     func updateFileDrop(at point: CGPoint) -> Bool {
-        let targeted = choosingFileDropDestination
-            && NotchFileToolsSupport.mediaDropArea(in: expandedGeometry, size: surfaceSize).contains(point)
-        if targetsMediaDrop != targeted { targetsMediaDrop = targeted }
-        return !targeted || NotchFileToolsService.shared.canAcceptMediaDrop
+        let choices = NotchFileToolsSupport.dropChoices(shelf: offersShelfDrop, link: offersLinkDrop,
+                                                        media: offersMediaDrop)
+        let choice = choosingFileDropDestination
+            ? NotchFileToolsSupport.dropChoice(at: point, among: choices, in: expandedGeometry, size: surfaceSize)
+            : .shelf
+        if targetsMediaDrop != (choice == .media) { targetsMediaDrop = choice == .media }
+        if targetsLinkDrop != (choice == .link) { targetsLinkDrop = choice == .link }
+        switch choice {
+        case .shelf: return true
+        case .link: return NotchLinkService.shared.canAcceptDrop
+        case .media: return NotchFileToolsService.shared.canAcceptMediaDrop
+        }
     }
 
     func endFileDrop() {
         let changed = choosingFileDropDestination
         if changed { choosingFileDropDestination = false }
         if targetsMediaDrop { targetsMediaDrop = false }
+        if targetsLinkDrop { targetsLinkDrop = false }
+        if offersMediaDrop { offersMediaDrop = false }
+        if offersLinkDrop { offersLinkDrop = false }
+        if offersShelfDrop { offersShelfDrop = false }
         if changed, acceptsUserInteraction { refreshPresentation() }
     }
 
@@ -2292,14 +2386,18 @@ final class NotchService: ObservableObject {
         defer { endFileDrop() }
         guard canAcceptFileDrop else { return false }
         let optimize = choosingFileDropDestination && targetsMediaDrop
+        let link = choosingFileDropDestination && targetsLinkDrop
         let accepted = optimize
             ? NotchFileToolsService.shared.openMediaDrop(pasteboard)
+            : link ? NotchLinkService.shared.shareDrop(pasteboard)
             : ShelfService.shared.acceptDrop(pasteboard: pasteboard)
         if accepted {
             heldDrag = false
+            dragApproached = false
             dragPlaceholder = false
             if !optimize { NotchFileToolsService.shared.hideMedia() }
-            open(.files)
+            // A link's page shows it being made, then its address.
+            open(link ? .links : .files)
             // A little hop for the file it watched come in, once the island rests again.
             reactMascot(.celebrate, patience: 30)
         }
@@ -2366,7 +2464,7 @@ final class NotchService: ObservableObject {
              : selectedNotice.event == .accessory ? .system : selectedNotice.event == .systemNotification ? .notifications
              : selectedNotice.event == .clipboard ? .clipboard : selectedNotice.event == .agents ? .agents
              : selectedNotice.event == .track ? .music : selectedNotice.event == .microphone ? .mixer
-             : selectedNotice.event == .watch ? .watch : .controls)
+             : selectedNotice.event == .watch ? .watch : selectedNotice.event == .shareLink ? .links : .controls)
     }
 
     /// Skipping through songs, or a title that lands before its artist, shows
@@ -3438,13 +3536,15 @@ final class NotchService: ObservableObject {
         if modules.contains(.files), AppFeature.shelf.isAvailable {
             windowHost?.setFileDropActions(NotchFileDropActions(
                 canAccept: { [weak self] pasteboard in
-                    self?.canAcceptFileDrop == true && !ShelfService.shared.isInternalDragActive
-                        && ShelfService.shared.canAcceptPasteboard(pasteboard)
+                    guard let self, self.canAcceptFileDrop, !ShelfService.shared.isInternalDragActive else { return false }
+                    // Turned away, a file reaching the top of the screen opens Mission Control.
+                    return self.takesFileDrop(pasteboard)
                 },
                 enter: { [weak self] in self?.beginFileDrop($0) },
                 accept: { [weak self] in self?.accept($0) == true },
                 exit: { [weak self] in
-                    guard let self else { return }
+                    // A file brought near keeps its choices while it moves around the island.
+                    guard let self, !self.dragApproached else { return }
                     self.endFileDrop()
                     self.hover(self.windowHost?.contains(NSEvent.mouseLocation) == true)
                 },
@@ -4037,6 +4137,21 @@ final class NotchService: ObservableObject {
                     self?.refreshPresentation()
                 }.store(in: &subscriptions)
         }
+        if NotchLinkSupport.showsActivity() {
+            // A link starting or ending, a download moving on or the next
+            // end changing, which can change the reading and its wings.
+            let links = NotchLinkService.shared
+            links.$links.map { links in
+                links.map { "\($0.id)\($0.expiresAt?.timeIntervalSince1970 ?? 0)\(Int(($0.progress ?? -1) * 100))" }
+            }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.syncMenuSpaceMonitoring()
+                self?.objectWillChange.send()
+                self?.refreshPresentation()
+            }.store(in: &subscriptions)
+        }
         if NotchSupport.routes(.agents) {
             AgentUsageService.shared.events.receive(on: DispatchQueue.main)
                 .sink { [weak self] in self?.showAgentEvent($0) }
@@ -4107,6 +4222,11 @@ final class NotchService: ObservableObject {
     }
 
     /// Murmur's recording, kept up while it lasts, and its word as it ends.
+    /// A link that was copied, or a file someone downloaded.
+    func showLinkNotice(_ title: String, detail: String, symbol: String) {
+        show(NotchNotice(event: .shareLink, title: title, detail: detail, symbol: symbol))
+    }
+
     private func showDictation(_ update: NotchDictationUpdate) {
         guard let phase = update.phase else {
             // Back at rest: a recording still showing goes; a result stays its time.

@@ -58,9 +58,14 @@ enum ShelfDropRoutingContract {
         var captureControls: Int?
         var modules: [NotchModule] = [.files]
         var heldDrag = true
+        var dragApproached = false
         var dragPlaceholder = true
         var choosingFileDropDestination = false
         var targetsMediaDrop = false
+        var offersMediaDrop = false
+        var offersLinkDrop = false
+        var offersShelfDrop = false
+        var targetsLinkDrop = false
         var pinned = false
         var geometry = NotchGeometry(screen: CGRect(x: 0, y: 0, width: 1440, height: 900), safeAreaTop: 32, cameraWidth: 180)
         var expandedGeometry: NotchGeometry { geometry }
@@ -73,6 +78,14 @@ enum ShelfDropRoutingContract {
             opened.append(module)
             if pinned { self.pinned = true }
         }
+    }
+    /// Links stay off here; the shelf and media destinations are what these cover.
+    final class NotchLinkService {
+        static var shared = NotchLinkService()
+        var offersDrop: Bool { false }
+        var canAcceptDrop: Bool { false }
+        func linkDropContent(for pasteboard: NSPasteboard) -> [URL]? { nil }
+        func shareDrop(_ pasteboard: NSPasteboard) -> Bool { false }
     }
     class FileToolsState {
         enum MediaState { case idle, running }
@@ -244,7 +257,7 @@ enum ShelfDropRoutingTests {
             suite.expect(Context.NotchFileToolsService.shared.mediaDropContent(for: board) == nil,
                    "a text companion prevents partial optimization of a mixed drag")
 
-            for revoked in 0..<9 {
+            for revoked in 0..<8 {
                 reset()
                 board.clearContents()
                 board.writeObjects([image as NSURL])
@@ -256,12 +269,11 @@ enum ShelfDropRoutingTests {
                 switch revoked {
                 case 0: Context.AppFeature.mediaTools.isAvailable = false
                 case 1: Context.AppFeature.shelf.isAvailable = false
-                case 2: Context.UserDefaults.standard.enabled = false
-                case 3: Context.NotchSupport.enabled = false
-                case 4: Context.NotchSupport.visibleModules = []
-                case 5: files.media.state = .running
-                case 6: files.isRunning = true
-                case 7: notch.acceptsUserInteraction = false
+                case 2: Context.NotchSupport.enabled = false
+                case 3: Context.NotchSupport.visibleModules = []
+                case 4: files.media.state = .running
+                case 5: files.isRunning = true
+                case 6: notch.acceptsUserInteraction = false
                 default: notch.captureControls = 1
                 }
                 suite.expect(!notch.accept(board) && files.inputs.isEmpty && Context.ShelfService.shared.ordinaryAccepts == 0,
@@ -269,6 +281,16 @@ enum ShelfDropRoutingTests {
                 suite.expect(!notch.choosingFileDropDestination && !notch.targetsMediaDrop,
                        "a refused drop clears its transient presentation")
             }
+            reset()
+            Context.UserDefaults.standard.enabled = false
+            let shelfOff = Context.Notch()
+            shelfOff.beginFileDrop(board)
+            suite.expect(shelfOff.canAcceptFileDrop && shelfOff.choosingFileDropDestination && !shelfOff.offersShelfDrop
+                   && shelfOff.updateFileDrop(at: CGPoint(x: 40, y: shelfOff.surfaceSize.height / 2))
+                   && shelfOff.targetsMediaDrop && shelfOff.accept(board)
+                   && Context.NotchFileToolsService.shared.inputs == [image]
+                   && Context.ShelfService.shared.ordinaryAccepts == 0,
+                   "with the shelf switched off, Optimize alone takes the whole page")
             reset()
             let notch = Context.Notch()
             notch.beginFileDrop(board)

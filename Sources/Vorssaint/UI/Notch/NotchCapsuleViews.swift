@@ -431,7 +431,7 @@ private struct NotchCapsuleCompanionMark: View {
                     NotchCapsuleCalendarStrip.clockMark(countdown, now: context.date)
                 }
             }
-        case .timer, .keepAwake, .watch:
+        case .timer, .keepAwake, .watch, .links:
             EmptyView()
         }
     }
@@ -718,6 +718,53 @@ struct NotchCapsuleKeepAwakeStrip: View {
         .accessibilityValue(NotchKeepAwakeStrip.status(end: end, language: l10n.language))
         .accessibilityHint(FeatureStrings.notch(l10n.language).open)
         .accessibilityIdentifier("notch.keepAwake")
+    }
+}
+
+/// Shared links in the floating capsule: the link's mark, then the same
+/// reading as the island beside the camera.
+struct NotchCapsuleLinkStrip: View {
+    @ObservedObject var service: NotchService
+    let size: CGSize
+    /// Another display's capsule, when the island shows on every display.
+    var displayGeometry: NotchGeometry? = nil
+    @ObservedObject private var links = NotchLinkService.shared
+    @ObservedObject private var l10n = L10n.shared
+
+    var body: some View {
+        NotchStripHold(NotchLinkReading(links), shows: links.isActive) { reading in
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                row(reading.text(now: context.date, language: l10n.language))
+            }
+        }
+    }
+
+    private func row(_ reading: String?) -> some View {
+        NotchCapsuleRow(size: size, geometry: displayGeometry ?? service.geometry) {
+            HStack(spacing: CapsuleLayout.spacing) {
+                Image(systemName: NotchLinkSupport.symbol)
+                    .font(.system(size: CapsuleLayout.symbolSize, weight: .semibold))
+                    .capsuleCentred(NotchLinkSupport.symbol)
+                if let reading {
+                    Text(reading)
+                        .font(Font(CapsuleLayout.readingFont as CTFont))
+                        .lineLimit(1).fixedSize()
+                        .onChange(of: NotchAgentSupport.readingShape(reading)) { _, _ in
+                            DispatchQueue.main.async { service.refreshPresentation() }
+                        }
+                } else {
+                    Image(systemName: NotchLinkSupport.openSymbol)
+                        .font(.system(size: CapsuleLayout.readingFont.pointSize, weight: .medium))
+                        .capsuleCentred(NotchLinkSupport.openSymbol, size: CapsuleLayout.readingFont.pointSize)
+                }
+            }
+            .foregroundStyle(.cyan)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(FeatureStrings.notchLinks(l10n.language).title)
+        .accessibilityValue(NotchLinkReading.status(links, language: l10n.language))
+        .accessibilityHint(FeatureStrings.notch(l10n.language).open)
+        .accessibilityIdentifier("notch.links")
     }
 }
 

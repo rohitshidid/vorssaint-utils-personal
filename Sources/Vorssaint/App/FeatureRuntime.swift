@@ -374,6 +374,15 @@ final class FeatureRuntime: ObservableObject {
             if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
             else { NotchWatchService.shared.stop() }
         },
+        .notchWorkloads: {
+            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
+            else { NotchWorkloadService.shared.stop() }
+        },
+        // Uninstalling ends every link, its tunnel and its archives.
+        .notchLinks: {
+            NotchLinkService.shared.syncWithPreferences()
+            if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }
+        },
         // Leaving folds the wings it rests in, and coming back greets.
         .notchMascot: {
             if AppFeature.notch.isAvailable { NotchService.shared.syncWithPreferences() }

@@ -13,6 +13,7 @@ struct NotchFilesView: View {
     @ObservedObject private var features = FeatureRuntime.shared
     @ObservedObject private var archives = NotchFileToolsService.shared
     @ObservedObject private var media = NotchFileToolsService.shared.media
+    @ObservedObject private var links = NotchLinkService.shared
     @State private var actionInputs: [URL] = []
     @State private var supportedTools: [MediaTool] = []
     @State private var showingActions = false
@@ -20,9 +21,11 @@ struct NotchFilesView: View {
     @Environment(\.notchSettingsPreview) private var preview
     private var text: NotchFilesStrings { FeatureStrings.notchFiles(l10n.language) }
 
-    /// Dragging media over the island asks where it goes.
+    /// Dragging media, or files while links are on, over the island asks where it goes.
     private var choosesDropDestination: Bool {
-        service.choosingFileDropDestination && AppFeature.mediaTools.isAvailable
+        service.choosingFileDropDestination
+            && (service.offersMediaDrop && AppFeature.mediaTools.isAvailable
+                || service.offersLinkDrop && AppFeature.notchLinks.isAvailable)
     }
 
     private var presentedMediaSession: NotchMediaSession? {
@@ -42,10 +45,19 @@ struct NotchFilesView: View {
         VStack(spacing: NotchLayout.rowSpacing) {
             if choosesDropDestination {
                 HStack(spacing: NotchFileToolsSupport.dropSpacing) {
-                    dropDestination(FeatureStrings.notch(l10n.language).files, symbol: "tray.and.arrow.down",
-                                    selected: !service.targetsMediaDrop)
-                    dropDestination(text.optimizeMedia, symbol: "wand.and.stars", selected: service.targetsMediaDrop,
-                                    available: archives.canAcceptMediaDrop)
+                    if service.offersShelfDrop {
+                        dropDestination(FeatureStrings.notch(l10n.language).files, symbol: "tray.and.arrow.down",
+                                        selected: !service.targetsMediaDrop && !service.targetsLinkDrop)
+                    }
+                    if service.offersLinkDrop {
+                        dropDestination(FeatureStrings.notchLinks(l10n.language).getLink, symbol: NotchLinkSupport.symbol,
+                                        selected: service.targetsLinkDrop, available: links.canAcceptDrop,
+                                        busy: FeatureStrings.notchLinks(l10n.language).installing)
+                    }
+                    if service.offersMediaDrop {
+                        dropDestination(text.optimizeMedia, symbol: "wand.and.stars", selected: service.targetsMediaDrop,
+                                        available: archives.canAcceptMediaDrop)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let session = presentedMediaSession {
@@ -122,11 +134,12 @@ struct NotchFilesView: View {
         if archives.mediaContentHeight != previous { service.refreshPresentation() }
     }
 
-    private func dropDestination(_ title: String, symbol: String, selected: Bool, available: Bool = true) -> some View {
+    private func dropDestination(_ title: String, symbol: String, selected: Bool, available: Bool = true,
+                                 busy: String? = nil) -> some View {
         VStack(spacing: 12) {
             Image(systemName: symbol).font(.system(size: 28, weight: .light))
             Text(title).font(.callout.weight(.medium)).multilineTextAlignment(.center)
-            if !available { Text(l10n.s.mediaRunning).font(.caption).foregroundStyle(.secondary) }
+            if !available { Text(busy ?? l10n.s.mediaRunning).font(.caption).foregroundStyle(.secondary) }
         }
         .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -204,6 +217,12 @@ struct NotchFilesView: View {
                 }
                 .disabled(!shelf.hasFilesForActions || !archives.canAcceptMediaDrop)
                 .popover(isPresented: $showingActions) { fileActions.padding(14).frame(width: 270) }
+            }
+            if links.offersDrop {
+                NotchIconButton(symbol: NotchLinkSupport.symbol, title: FeatureStrings.notchLinks(l10n.language).getLink) {
+                    if links.share(shelf.fileURLsForActions()) { service.open(.links) }
+                }
+                .disabled(!shelf.hasFilesForActions || !links.canAcceptDrop)
             }
             NotchIconButton(symbol: "square.and.arrow.up", title: l10n.s.shelfActionShare) {
                 shareAnchor.present(shelf.fileURLsForActions())

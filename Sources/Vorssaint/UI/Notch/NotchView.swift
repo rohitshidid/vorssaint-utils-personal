@@ -238,6 +238,7 @@ struct NotchView: View {
             case .calendar: NotchCapsuleCalendarStrip(service: service, size: size)
             case .music: NotchCapsuleMusicStrip(service: service, size: size, interactive: true)
             case .keepAwake: NotchCapsuleKeepAwakeStrip(service: service, size: size)
+            case .links: NotchCapsuleLinkStrip(service: service, size: size)
             }
         } else {
             // Handed down, the wings stay as they were drawn while a strip
@@ -252,6 +253,7 @@ struct NotchView: View {
             case .calendar: NotchCalendarStrip(service: service, displayGeometry: geometry)
             case .music: NotchMusicStrip(service: service, displayGeometry: geometry, interactive: true)
             case .keepAwake: NotchKeepAwakeStrip(service: service, displayGeometry: geometry)
+            case .links: NotchLinkStrip(service: service, displayGeometry: geometry)
             }
         }
     }
@@ -599,6 +601,8 @@ struct NotchView: View {
             case .scratchpad: NotchScratchpadView(service: service)
             case .agents: NotchAgentsView(size: pageSize)
             case .watch: NotchWatchView(size: pageSize)
+            case .workloads: NotchWorkloadsView(size: pageSize)
+            case .links: NotchLinksView(service: service, size: pageSize)
             }
         }
     }
@@ -834,6 +838,8 @@ extension NotchModule: PanelOrderItem {
         case .scratchpad: return FeatureStrings.scratchpad(language).pageTitle
         case .agents: return FeatureStrings.notchAgents(language).title
         case .watch: return FeatureStrings.notchWatch(language).title
+        case .workloads: return FeatureStrings.notchWorkloads(language).title
+        case .links: return FeatureStrings.notchLinks(language).title
         }
     }
 }

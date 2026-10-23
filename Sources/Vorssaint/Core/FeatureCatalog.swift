@@ -31,7 +31,7 @@ enum AppFeature: String, CaseIterable {
          commandBar, screenRecorder, wallpaper, killProcess, portManager
     // Dynamic Island, then its extensions
     case notch, notchCalendar, notchNotifications, notchGestures, notchTimer, notchAccessories, notchLyrics,
-         notchQueue, notchLiveEqualizer, notchDownloads, notchAgents, notchWatch, notchMascot
+         notchQueue, notchLiveEqualizer, notchDownloads, notchAgents, notchWatch, notchMascot, notchWorkloads, notchLinks
     // System monitor, one entry per metric family (temperatures live with
     // their parent metric: CPU temp with CPU, battery temp with power).
     case monitorCPU, monitorGPU, monitorMemory, monitorNetwork, monitorDisk, monitorPower, connectedDevices, fanControl
@@ -83,7 +83,7 @@ extension AppFeature {
         // Watch asks when an area is chosen and checks on every reading. The
         // companion uses no permission at all.
         case .screenOCR, .cleaningMode, .screenshot, .commandBar, .screenRecorder, .wallpaper, .notchWatch,
-             .notchMascot:
+             .notchMascot, .notchWorkloads, .notchLinks:
             return false
         default:
             return true
@@ -119,7 +119,7 @@ extension AppFeature {
             return .tools
         case .notch, .notchCalendar, .notchNotifications, .notchGestures, .notchTimer, .notchAccessories,
              .notchLyrics, .notchQueue, .notchLiveEqualizer, .notchDownloads, .notchAgents, .notchWatch,
-             .notchMascot:
+             .notchMascot, .notchWorkloads, .notchLinks:
             return .dynamicIsland
         case .monitorCPU, .monitorGPU, .monitorMemory, .monitorNetwork, .monitorDisk, .monitorPower,
              .connectedDevices, .fanControl:
@@ -195,6 +195,8 @@ extension AppFeature {
         case .notchAgents: return "sparkles"
         case .notchWatch: return "eye"
         case .notchMascot: return "face.smiling"
+        case .notchWorkloads: return "shippingbox"
+        case .notchLinks: return "link"
         case .notch: return "macbook"
         case .radialMenu: return "circle.grid.cross"
         case .scratchpad: return "note.text"
@@ -269,6 +271,9 @@ extension AppFeature {
         case .notchAgents: return [DefaultsKey.notchAgentsEnabled]
         case .notchWatch: return [DefaultsKey.notchWatchEnabled]
         case .notchMascot: return [DefaultsKey.notchMascotEnabled]
+        // Its page is its only switch, in the island's content.
+        case .notchWorkloads: return []
+        case .notchLinks: return []
         case .notch: return [DefaultsKey.notchEnabled]
         case .radialMenu: return [DefaultsKey.radialMenuEnabled]
         case .clipboardHistory: return [DefaultsKey.clipboardHistoryEnabled]
@@ -337,6 +342,11 @@ extension AppFeature {
         case .notchAgents: return []
         // It only draws, and hears of what happens from the island itself.
         case .notchMascot: return []
+        // The Docker CLI and Ollama's server on this Mac answer without a grant.
+        case .notchWorkloads: return []
+        // A server on the loopback interface and cloudflared, which the
+        // Mac runs like any other tool, need no grant.
+        case .notchLinks: return []
         // The bars read the player's own audio output, which macOS gates
         // behind the same permission the mixer and the recorder ask for.
         case .notchLiveEqualizer: return [.audioCapture]
@@ -415,10 +425,14 @@ extension AppFeature {
         features(in: .dynamicIsland).filter { $0 != .notch }
     }
 
-    /// Agents reads local session histories, and the companion changes the
-    /// resting island. Both are separate choices when installing the island.
+    /// Agents reads local session histories, the companion changes the
+    /// resting island, Docker & Ollama is a developer's tool, and Quick
+    /// Links opens files to the internet. Each is a separate choice when
+    /// installing the island.
     static var dynamicIslandInitialExtensions: [AppFeature] {
-        dynamicIslandExtensions.filter { $0 != .notchMascot && $0 != .notchAgents }
+        dynamicIslandExtensions.filter {
+            $0 != .notchMascot && $0 != .notchAgents && $0 != .notchWorkloads && $0 != .notchLinks
+        }
     }
 
     var initialInstallGroup: [AppFeature] {
@@ -484,7 +498,8 @@ extension AppFeature {
              .connectedDevices:
             return true
         case .focusFollowsMouse, .scrollHorizontal, .linearScroll, .diskImageInstaller, .audioPriority,
-             .wallpaper, .killProcess, .portManager, .fanControl, .notchMascot, .spacesOrder:
+             .wallpaper, .killProcess, .portManager, .fanControl, .notchMascot, .spacesOrder, .notchWorkloads,
+             .notchLinks:
             return false
         }
     }

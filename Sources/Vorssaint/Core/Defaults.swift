@@ -829,11 +829,16 @@ enum DefaultsKey {
     static let notchTranslucentBackground = "notchTranslucentBackground"
     static let notchShelf = "notchShelf"
     static let notchDragReveal = "notchDragReveal"
+    static let notchDragProximity = "notchDragProximity"
     static let notchCaptureControls = "notchCaptureControls"
     static let notchQuickPanel = "notchQuickPanel"
     static let notchAppPanel = "notchAppPanel"
     static let notchHidesMenuBarIcon = "notchHidesMenuBarIcon" // the island takes the glyph's place while it is on
     static let notchKeepAwakeActivity = "notchKeepAwakeActivity" // a running Keep Awake session in the closed island
+    static let notchLinkAlerts = "notchLinkAlerts" // a link copied, or a file someone downloaded, as an island notice
+    static let notchLinkActivity = "notchLinkActivity" // shared links in the closed island
+    static let notchLinkExpiry = "notchLinkExpiry" // how long new links last
+    static let notchLinkTunnelPID = "notchLinkTunnelPID" // cloudflared, to end it if the app did not quit properly
     static let notchScratchpad = "notchScratchpad"
     static let notchHoverExpands = "notchHoverExpands"
     static let notchGesturesEnabled = "notchGesturesEnabled"
@@ -1439,11 +1444,14 @@ enum Defaults {
         DefaultsKey.notchTranslucentBackground: false,
         DefaultsKey.notchShelf: true,
         DefaultsKey.notchDragReveal: true,
+        DefaultsKey.notchDragProximity: NotchSupport.defaultDragProximity,
         DefaultsKey.notchCaptureControls: true,
         DefaultsKey.notchQuickPanel: true,
         DefaultsKey.notchAppPanel: false,
         DefaultsKey.notchHidesMenuBarIcon: false,
         DefaultsKey.notchKeepAwakeActivity: false,
+        DefaultsKey.notchLinkAlerts: true,
+        DefaultsKey.notchLinkActivity: true,
         DefaultsKey.notchScratchpad: true,
         DefaultsKey.notchHoverExpands: true,
         DefaultsKey.notchGesturesEnabled: true,

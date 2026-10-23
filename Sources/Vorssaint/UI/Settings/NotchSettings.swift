@@ -93,11 +93,14 @@ struct NotchSettings: View {
     @AppStorage(DefaultsKey.notchLiquidGlassEnabled) private var liquidGlass = false
     @AppStorage(DefaultsKey.notchShelf) private var shelfWindow = true
     @AppStorage(DefaultsKey.notchDragReveal) private var dragReveal = true
+    @AppStorage(DefaultsKey.notchDragProximity) private var dragProximity = NotchSupport.defaultDragProximity
     @AppStorage(DefaultsKey.notchCaptureControls) private var captureControls = true
     @AppStorage(DefaultsKey.notchQuickPanel) private var quickPanel = true
     @AppStorage(DefaultsKey.notchAppPanel) private var appPanel = false
     @AppStorage(DefaultsKey.notchHidesMenuBarIcon) private var hidesMenuBarIcon = false
     @AppStorage(DefaultsKey.notchKeepAwakeActivity) private var keepAwakeActivity = false
+    @AppStorage(DefaultsKey.notchLinkAlerts) private var linkAlerts = true
+    @AppStorage(DefaultsKey.notchLinkActivity) private var linkActivity = true
     @AppStorage(DefaultsKey.notchScratchpad) private var scratchpad = true
     @AppStorage(DefaultsKey.brightnessControlEnabled) private var brightnessControlEnabled = false
     @AppStorage(DefaultsKey.clipboardHistoryEnabled) private var clipboardHistoryEnabled = false
@@ -122,14 +125,14 @@ struct NotchSettings: View {
          String(cameraEnabled), String(accessoriesEnabled), String(outlineEnabled), String(hideMenuBarGap),
          String(customWidth), String(customHeight), String(cameraFitWidth), String(cameraFitHeight),
          String(capsuleFitWidth), String(capsuleFitHeight), String(capsuleFitDrop), String(hapticFeedback),
-         String(shelfWindow), String(dragReveal), String(captureControls), String(quickPanel), String(appPanel),
+         String(shelfWindow), String(dragReveal), String(dragProximity), String(captureControls), String(quickPanel), String(appPanel),
          String(hoverExpand), String(hideUntilHover), String(hideInFullscreen), String(coversMenus),
          display, silhouette, String(hover), hidden, order, String(volume), String(inputSource), String(dictation),
          String(brightness), String(keyboardLight),
          String(microphone), String(battery), String(clipboard), String(clipboardWindow), clipboardCardSize,
          String(capture), String(trackChange), captureAction, String(showInCaptures),
          String(returnHome), homeModule, String(opensActivity), String(scratchpad),
-         String(agentsEnabled), String(watchEnabled), String(keepAwakeActivity), String(shortcutEnabled)]
+         String(agentsEnabled), String(watchEnabled), String(keepAwakeActivity), String(shortcutEnabled), String(linkAlerts), String(linkActivity)]
     }
 
     private var access: Binding<NotchQuickAccessConfiguration> {
@@ -484,7 +487,10 @@ struct NotchSettings: View {
             }
         case .files:
             destination(text.files, symbol: "tray.full", value: $shelfWindow, available: AppFeature.shelf.isAvailable)
-            if shelfWindow { switchRow("hand.draw", text.dragReveal, isOn: $dragReveal) }
+            if shelfWindow {
+                switchRow("hand.draw", text.dragReveal, isOn: $dragReveal)
+                dragProximityControl
+            }
             if AppFeature.mediaTools.isAvailable {
                 Text(FeatureStrings.notchFiles(l10n.language).optimizeDropHint)
                     .font(.caption).foregroundStyle(.secondary)
@@ -522,7 +528,11 @@ struct NotchSettings: View {
         case .watch:
             NotchWatchSettingsControls()
                 .toggleStyle(TrailingSwitchToggleStyle())
-        case .mixer, .system, .tools:
+        case .links:
+            let links = FeatureStrings.notchLinks(l10n.language)
+            switchRow("bell.badge", links.alerts, isOn: $linkAlerts)
+            switchRow(NotchLinkSupport.symbol, links.activity, isOn: $linkActivity)
+        case .mixer, .system, .tools, .workloads:
             EmptyView()
         }
     }
@@ -745,6 +755,25 @@ struct NotchSettings: View {
         }
     }
 
+    /// How near a dragged file comes before the island opens to take it.
+    private var dragProximityControl: some View {
+        let value = Binding(get: { NotchSupport.sanitizedDragProximity(dragProximity) },
+                            set: { dragProximity = NotchSupport.sanitizedDragProximity($0) })
+        let formatted = value.wrappedValue == 0 ? text.dragProximityOff : "\(Int(value.wrappedValue)) pt"
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(text.dragProximity)
+                Spacer()
+                Text(formatted).monospacedDigit().foregroundStyle(.secondary)
+            }
+            Slider(value: value, in: NotchSupport.dragProximityRange, step: 10) {
+                Text(text.dragProximity)
+            }.labelsHidden().accessibilityValue(formatted)
+            Text(text.dragProximityHint).font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }.padding(.leading, settingsRowTextInset)
+    }
+
     private func levelSlider(_ title: String, range: ClosedRange<Int>, value: Binding<Int>) -> some View {
         let formatted = "\(value.wrappedValue)%"
         let slider = Binding(get: { Double(value.wrappedValue) }, set: { value.wrappedValue = Int($0.rounded()) })
@@ -858,6 +887,8 @@ struct NotchSettings: View {
         case .scratchpad: return .scratchpad
         case .agents: return .notchAgents
         case .watch: return .notchWatch
+        case .workloads: return .notchWorkloads
+        case .links: return .notchLinks
         }
     }
 

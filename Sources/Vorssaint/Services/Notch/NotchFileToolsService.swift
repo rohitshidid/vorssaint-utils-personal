@@ -35,7 +35,6 @@ final class NotchFileToolsService: ObservableObject {
     var offersMediaDrop: Bool {
         NotchSupport.showsFiles()
             && AppFeature.mediaTools.isAvailable && AppFeature.shelf.isAvailable
-            && UserDefaults.standard.bool(forKey: DefaultsKey.shelfEnabled)
     }
 
     var canAcceptMediaDrop: Bool {

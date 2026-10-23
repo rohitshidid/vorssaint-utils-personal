@@ -435,7 +435,7 @@ final class AgentUsageService: ObservableObject {
     /// Reads the logs that grew, were replaced or disappeared since the last
     /// look, among those an agent may still be writing. True when that
     /// changed what is stored.
-    private func pollOpenLogs(within window: TimeInterval) -> Bool {
+    private func pollOpenLogs(within window: TimeInterval, keptOpen: TimeInterval = 0) -> Bool {
         guard readerSession >= 0 else { return false }
         let now = Date()
         // A turn gone quiet, as while it waits for an approval, is noticed
@@ -447,7 +447,8 @@ final class AgentUsageService: ObservableObject {
         }
         var changed = false
         for (path, cursor) in cursors
-        where working.contains(path) || now.timeIntervalSince(cursor.modified) < window {
+        where working.contains(path)
+            || now.timeIntervalSince(cursor.modified) < (cursor.provider.holdsLogsOpen ? max(window, keptOpen) : window) {
             if cursor.provider == .opencode {
                 // A database changes in place: its write-ahead log grows instead.
                 if let modified = AgentOpenCodeReader.modified(path), modified <= cursor.modified { continue }
@@ -598,8 +599,9 @@ final class AgentUsageService: ObservableObject {
             store.closeIdleTurns(now: now, after: NotchAgentSupport.idleTurn)
             store.dropRecords(before: now.addingTimeInterval(-Self.horizon))
             // A log kept open through a long pause reports nothing when work
-            // resumes; the day's logs are looked at less often than recent ones.
-            var changed = pollOpenLogs(within: 86_400)
+            // resumes; the day's logs are looked at less often than recent ones,
+            // and every log an app may still hold open as well.
+            var changed = pollOpenLogs(within: 86_400, keptOpen: Self.horizon)
             // A folder that appears later, like a first Codex session, is
             // picked up without a restart.
             if now.timeIntervalSince(lastRootCheck) > 300 {

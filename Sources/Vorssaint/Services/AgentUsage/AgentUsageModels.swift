@@ -30,6 +30,11 @@ enum AgentProvider: String, CaseIterable, Identifiable, Codable {
 
     /// Whether the provider records a plan allowance in its local logs.
     var reportsLimits: Bool { self != .copilot }
+
+    /// The Codex app keeps a thread's log open for as long as it runs, and
+    /// macOS reports nothing appended to an open file: a thread resumed days
+    /// later is found only by looking.
+    var holdsLogsOpen: Bool { self == .codex }
 }
 
 /// Token counts in the shape both logs can be reduced to. `input` excludes

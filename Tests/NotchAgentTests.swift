@@ -12,6 +12,8 @@ enum NotchAgentTests {
         suite.expect(shipped != nil, "the price list that ships with the app is valid")
         AgentPricing.install(shipped ?? .empty)
         defer { AgentPricing.install(previous) }
+        suite.expect(AgentProvider.allCases.filter(\.holdsLogsOpen) == [.codex],
+                     "only Codex keeps its logs open, so only its older logs are looked at again")
         priceList(suite, shipped: shipped ?? .empty)
         pricing(suite)
         claudeParsing(suite)

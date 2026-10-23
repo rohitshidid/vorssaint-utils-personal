@@ -30,11 +30,10 @@ final class FanControlService: ObservableObject {
     private var requestGeneration = 0
     private var tickCount = 0
     private var registrationAttemptedVersion: String?
+    private var reloadAttempted = false
     private var observingWorkspace = false
 
-    private static var appService: SMAppService {
-        SMAppService.daemon(plistName: FanControlIdentifiers.plistName)
-    }
+    private static var appService: FanControlRegistration { FanControlRegistration() }
 
     private static var helperVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "VorssaintFanControlHelperVersion") as? String
@@ -307,7 +306,7 @@ final class FanControlService: ObservableObject {
         return unregisterForRemoval(service)
     }
 
-    private static func unregisterForRemoval(_ service: SMAppService) -> Bool {
+    private static func unregisterForRemoval(_ service: FanControlRegistration) -> Bool {
         do {
             try service.unregister()
             return true
@@ -378,7 +377,7 @@ final class FanControlService: ObservableObject {
         send { proxy, reply in proxy.status(withReply: reply) } completion: { response in
             guard self.finishRequest(generation) else { return }
             guard let response else {
-                self.error = .helperUnavailable
+                if !self.reloadHelperIfNeeded() { self.error = .helperUnavailable }
                 return
             }
             self.apply(response)
@@ -416,6 +415,14 @@ final class FanControlService: ObservableObject {
         }
         operation(proxy) { data in
             finish(FanControlIPC.decode(data))
+        }
+        // A helper macOS refuses to launch never replies and never fails the
+        // connection either, so a request that goes unanswered gives up.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in
+            guard !finished else { return }
+            self?.connection?.invalidate()
+            self?.connection = nil
+            finish(nil)
         }
     }
 
@@ -504,28 +511,34 @@ final class FanControlService: ObservableObject {
               registrationAttemptedVersion != current,
               !UserDefaults.standard.bool(forKey: DefaultsKey.fanControlRecoveryNeeded) else { return false }
         registrationAttemptedVersion = current
+        reregister(current)
+        return true
+    }
+
+    /// An approved helper that does not answer was dropped by launchd, as
+    /// reinstalling the app does. Registering it again loads it, once per run.
+    private func reloadHelperIfNeeded() -> Bool {
+        guard !reloadAttempted, accessState == .enabled,
+              !UserDefaults.standard.bool(forKey: DefaultsKey.fanControlRecoveryNeeded) else { return false }
+        reloadAttempted = true
+        reregister(Self.helperVersion)
+        return true
+    }
+
+    private func reregister(_ current: String) {
         isWorking = true
-        Self.appService.unregister { error in
+        Self.appService.replace { error in
             DispatchQueue.main.async {
+                self.isWorking = false
+                self.refreshAccessState()
                 guard error == nil else {
-                    self.isWorking = false
                     self.error = .helperUnavailable
                     return
                 }
-                do {
-                    try Self.appService.register()
-                    UserDefaults.standard.set(current, forKey: DefaultsKey.fanControlHelperVersion)
-                    self.isWorking = false
-                    self.refreshAccessState()
-                    if self.accessState == .enabled { self.requestStatus() }
-                } catch {
-                    self.isWorking = false
-                    self.refreshAccessState()
-                    self.error = .helperUnavailable
-                }
+                UserDefaults.standard.set(current, forKey: DefaultsKey.fanControlHelperVersion)
+                if self.accessState == .enabled { self.requestStatus() }
             }
         }
-        return true
     }
 
     private func refreshLocalProbe() {
